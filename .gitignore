@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 *.db
 .env
-READMR.md
+README.md
