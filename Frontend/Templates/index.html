@@ -23,20 +23,32 @@
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav">
                         <li class="nav-item">
+                            <a class="btn btn-outline-light ms-2">
+                            Home
+                            </a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="#">Features</a>
+                        <a class="nav-link" href="dashboard.html">Dashboard</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="#">Pricing</a>
+                        <a class="nav-link" href="inventario.html">Inventario</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link disabled" aria-disabled="true">Disabled</a>
+                        <a class="nav-link" href="ventas.html">Ventas</a>
+                        </li>
+                        <li class="nav-item">
+                        <a class="nav-link" href="clientes.html">Clientes</a>
                         </li>
                         <li>
-                        <button class="btn btn-outline-light ms-2" data-bs-toggle="modal" data-bs-target="#modalLogin">
-                            Iniciar sesión
-                        </button>
+                            <button id="btnLogin" class="btn btn-outline-light ms-2" data-bs-toggle="modal" data-bs-target="#modalLogin">
+                                Iniciar sesión
+                            </button>
+                        </li>
+                        <li class="nav-item d-flex align-items-center ms-2">
+                            <span id="nombreUsuario" class="navbar-text text-light me-2"></span>
+                            <button id="btnCerrarSesion" class="btn btn-outline-danger" onclick="cerrarSesion()" style="display:none;">
+                                Cerrar sesión
+                            </button>
                         </li>
                     </ul>
                 </div>
@@ -60,18 +72,18 @@
 
                         <div class="mb-3">
                             <label class="form-label">Usuario</label>
-                            <input type="text" class="form-control" placeholder="tu_usuario">
+                            <input type="text" class="form-control" id="inputUsuario" placeholder="tu_usuario">
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label">Contraseña</label>
-                            <input type="password" class="form-control" placeholder="••••••••">
+                            <input type="password" class="form-control" id="inputPassword" placeholder="••••••••">
                             <div class="form-text text-end">
                                 <a href="#">¿Olvidaste tu contraseña?</a>
                             </div>
                         </div>
 
-                        <button class="btn btn-success w-100 mb-3">Iniciar sesión</button>
+                        <button class="btn btn-success w-100 mb-3" onclick="iniciarSesion()">Iniciar sesión</button>
 
                         <div class="d-flex align-items-center gap-2 mb-3">
                             <hr class="flex-grow-1">
@@ -104,13 +116,11 @@
                                 </span>
                             </button>
                         </div>
-
-                        <div class="modal-footer justify-content-center">
-                            <span class="text-secondary" style="font-size:13px;">
-                                ¿No tienes cuenta? <a href="#">Regístrate</a>
-                            </span>
-                        </div>
-
+                    </div>
+                    <div class="modal-footer justify-content-center">
+                        <span class="text-secondary" style="font-size:13px;">
+                            ¿No tienes cuenta? <a href="#">Regístrate</a>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -120,8 +130,56 @@
 
         <main class="container py-4 flex-grow-1">
 
-        </main>
+            <section class="text-center py-5">
+                <h1 class="display-4 fw-bold">Bravo's Gest</h1>
+                <p class="lead text-bg-dark">
+                    Gestiona tu negocio de forma simple, rápida e inteligente. 
+                    Controla tu inventario, registra ventas y administra clientes 
+                    desde un solo lugar.
+                </p>
+                <button id="btnLoginMain" class="btn btn-success btn-lg mt-3" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#modalLogin">
+                    Iniciar sesión
+                </button>
+            </section>
 
+            <section class="row g-4 py-4">
+                <div class="col-12 col-md-4">
+                    <div class="card h-100 text-center p-3">
+                        <div class="card-body">
+                            <h3 class="text-bg-dark">Inventario</h3>
+                            <p class="text-bg-dark">Controla el stock de tus productos, recibe alertas de escasez 
+                                y registra entradas y salidas en tiempo real.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <div class="card h-100 text-center p-3">
+                        <div class="card-body">
+                            <h3 class="text-bg-dark">Clientes</h3>
+                            <p class="text-bg-dark">Administra tu cartera de clientes, 
+                                lleva el control de créditos y mantén un historial de compras actualizado.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <div class="card h-100 text-center p-3">
+                        <div class="card-body">
+                            <h3 class="text-bg-dark">Ventas</h3>
+                            <p class="text-bg-dark">Registra cada venta al instante, 
+                                consulta el resumen del día y analiza el rendimiento de tu negocio con IA.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
         <footer class="bg-light bajo"> @Bravo'S Gest | 2026 | Terms of Services</footer>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
         <script src="../Static/Script.js"></script>

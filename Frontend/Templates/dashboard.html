@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+    <head>
+        <meta charset="UTF-8">
+        <link rel="stylesheet" href="../Static/style.css">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+        <title>Bravo'S Gest</title>
+        <link rel="icon" href="../../img/logo.jpg" type="image/png">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body class="bg-dark d-flex flex-column min-vh-100">
+        <!--NavBar-->
+        <nav class="navbar navbar-expand-lg bg-body-tertiary">
+            <div class="container-fluid">
+                <a class="navbar-brand d-flex align-items-center" href="#">
+                    <img src="../../img/logo.jpg" class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
+                    B'Gest
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="btn btn-outline-light ms-2">
+                            Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                        <a class="nav-link" href="index.html">Home</a>
+                        </li>
+                        <li class="nav-item">
+                        <a class="nav-link" href="inventario.html">Inventario</a>
+                        </li>
+                        <li class="nav-item">
+                        <a class="nav-link" href="ventas.html">Ventas</a>
+                        </li>
+                        <li class="nav-item">
+                        <a class="nav-link" href="clientes.html">Clientes</a>
+                        </li>
+                        <li class="nav-item d-flex align-items-center ms-2">
+                            <span id="nombreUsuario" class="navbar-text text-light me-2"></span>
+                            <button id="btnCerrarSesion" class="btn btn-outline-danger" onclick="cerrarSesion()" style="display:none;">
+                                Cerrar sesión
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <!--Fin del Navbar-->
+        <main class="container py-4 flex-grow-1">
+
+            <!-- Fila de métricas -->
+            <div class="row g-4">
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card h-100 p-3">
+                        <div class="card-body">
+                            <p class="text-secondary">Total productos</p>
+                            <h2 id="m-productos">—</h2>
+                            <small class="text-secondary">Registrados</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card h-100 p-3">
+                        <div class="card-body">
+                            <p class="text-secondary">Ventas hoy</p>
+                            <h2 id="m-ventas">—</h2>
+                            <small class="text-secondary">C$ total del día</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card h-100 p-3">
+                        <div class="card-body">
+                            <p class="text-secondary">Total clientes</p>
+                            <h2 id="m-clientes">—</h2>
+                            <small class="text-secondary">Registrados</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card h-100 p-3">
+                        <div class="card-body">
+                            <p class="text-secondary">Stock bajo</p>
+                            <h2 id="m-alertas" class="text-danger">—</h2>
+                            <small class="text-secondary">Productos críticos</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila de contenido -->
+            <div class="row g-4 mt-2">
+                <div class="col-12 col-lg-6">
+                    <div class="card p-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Últimas ventas</h5>
+                            <table class="table table-hover mt-3">
+                                <thead>
+                                    <tr>
+                                        <th>Cliente</th>
+                                        <th>Hora</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-ventas">
+                                    <tr>
+                                        <td colspan="3" class="text-center text-secondary">Cargando...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card p-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Productos con stock bajo</h5>
+                            <ul class="list-group list-group-flush mt-3" id="lista-stock">
+                                <li class="list-group-item text-secondary">Cargando...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="bg-light bajo"> @Bravo'S Gest | 2026 | Terms of Services</footer>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+        <script src="../Static/Script.js"></script>
+        <script src="../Static/dashboard.js"></script>
+    </body>
+</html>
