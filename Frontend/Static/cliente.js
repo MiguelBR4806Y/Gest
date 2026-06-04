@@ -1,7 +1,27 @@
-const BASE = "http://localhost:8000";
+const BASE = "http://127.0.0.1:8000";
 
 async function apiGet(ruta) {
   const respuesta = await fetch(BASE + ruta);
+  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+  return respuesta.json();
+}
+
+async function apiPost(ruta, datos) {
+  const respuesta = await fetch(BASE + ruta, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(datos),
+  });
+  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+  return respuesta.json();
+}
+
+async function apiPut(ruta, datos) {
+  const respuesta = await fetch(BASE + ruta, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(datos),
+  });
   if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
   return respuesta.json();
 }
@@ -16,7 +36,6 @@ function formatearCordobas(numero) {
   );
 }
 
-// Cargar resumen de clientes
 async function cargarResumen() {
   try {
     const data = await apiGet("/clientes/");
@@ -24,35 +43,24 @@ async function cargarResumen() {
 
     const total = clientes.length;
     const conCredito = clientes.filter(
-      (c) => (c.credito ?? c.saldo_credito ?? 0) > 0,
+      (c) => (c.credito_usado ?? 0) > 0,
     ).length;
     const montoTotal = clientes.reduce(
-      (acc, c) => acc + (c.credito ?? c.saldo_credito ?? 0),
+      (acc, c) => acc + (c.credito_usado ?? 0),
       0,
     );
 
     document.getElementById("c-total").textContent = total;
-    document.getElementById("c-credito").textContent = conCredito;
+    document.getElementById("c-credito-total").textContent = conCredito;
     document.getElementById("c-monto").textContent =
       formatearCordobas(montoTotal);
   } catch (e) {
     document.getElementById("c-total").textContent = "Error";
-    document.getElementById("c-credito").textContent = "Error";
+    document.getElementById("c-credito-total").textContent = "Error";
     document.getElementById("c-monto").textContent = "Error";
   }
 }
 
-async function apiPost(ruta, datos) {
-  const respuesta = await fetch(BASE + ruta, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
-  });
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
-
-// Cargar tabla de clientes
 async function cargarClientes() {
   try {
     const data = await apiGet("/clientes/");
@@ -68,24 +76,22 @@ async function cargarClientes() {
     tbody.innerHTML = clientes
       .map(
         (c, i) => `
-            <tr>
-                <td>${i + 1}</td>
-                <td>${c.nombre ?? c.name ?? "—"}</td>
-                <td>${c.telefono ?? c.phone ?? "—"}</td>
-                <td>
-                    <span class="badge ${(c.credito ?? c.saldo_credito ?? 0) > 0 ? "bg-warning text-dark" : "bg-success"}">
-                        ${formatearCordobas(c.credito ?? c.saldo_credito ?? 0)}
-                    </span>
-                </td>
-                <td>${c.ultima_compra ?? c.last_purchase ?? "—"}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-warning me-1"
-                            onclick="editarCliente(${c.id})">Editar</button>
-                    <button class="btn btn-sm btn-outline-danger"
-                            onclick="eliminarCliente(${c.id})">Eliminar</button>
-                </td>
-            </tr>
-        `,
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.nombre ?? "—"}</td>
+        <td>${c.telefono ?? "—"}</td>
+        <td>
+          <span class="badge ${(c.credito_usado ?? 0) > 0 ? "bg-warning text-dark" : "bg-success"}">
+            ${formatearCordobas(c.credito_usado ?? 0)}
+          </span>
+        </td>
+        <td>${c.ultima_compra ?? "—"}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-warning me-1" onclick="editarCliente(${c.id})">Editar</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="eliminarCliente(${c.id})">Eliminar</button>
+        </td>
+      </tr>
+    `,
       )
       .join("");
   } catch (e) {
@@ -94,20 +100,39 @@ async function cargarClientes() {
   }
 }
 
-// Editar cliente
-function editarCliente(id) {
-  // Por implementar en Semana 3
-  alert("Editar cliente #" + id);
+async function editarCliente(id) {
+  try {
+    const c = await apiGet("/clientes/" + id);
+    document.getElementById("ec-id").value = c.id;
+    document.getElementById("ec-nombre").value = c.nombre;
+    document.getElementById("ec-telefono").value = c.telefono ?? "";
+    document.getElementById("ec-credito").value = c.credito_limite ?? 0;
+    new bootstrap.Modal(document.getElementById("modalEditarCliente")).show();
+  } catch (e) {
+    alert("Error al cargar el cliente");
+  }
 }
 
-// Eliminar cliente
-async function eliminarCliente(id) {
-  if (!confirm("¿Seguro que quieres eliminar este cliente?")) return;
+async function guardarEdicionCliente() {
+  const id = document.getElementById("ec-id").value;
+  const nombre = document.getElementById("ec-nombre").value.trim();
+  const telefono = document.getElementById("ec-telefono").value.trim();
+  const credito_limite =
+    parseFloat(document.getElementById("ec-credito").value) || 0;
+
+  if (!nombre) {
+    alert("El nombre es obligatorio");
+    return;
+  }
+
   try {
-    await fetch(BASE + "/clientes/" + id, { method: "DELETE" });
+    await apiPut("/clientes/" + id, { nombre, telefono, credito_limite });
+    bootstrap.Modal.getInstance(
+      document.getElementById("modalEditarCliente"),
+    ).hide();
     cargarPagina();
   } catch (e) {
-    alert("Error al eliminar");
+    alert("Error al guardar los cambios");
   }
 }
 
@@ -136,7 +161,16 @@ async function agregarCliente() {
   }
 }
 
-// Ejecutar al cargar la página
+async function eliminarCliente(id) {
+  if (!confirm("¿Seguro que quieres eliminar este cliente?")) return;
+  try {
+    await fetch(BASE + "/clientes/" + id, { method: "DELETE" });
+    cargarPagina();
+  } catch (e) {
+    alert("Error al eliminar");
+  }
+}
+
 async function cargarPagina() {
   await Promise.allSettled([cargarResumen(), cargarClientes()]);
 }

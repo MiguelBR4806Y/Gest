@@ -1,13 +1,11 @@
-const BASE = "http://localhost:8000";
+const BASE = "http://127.0.0.1:8000";
 
-// Función reutilizable para llamar a la API
 async function apiGet(ruta) {
   const respuesta = await fetch(BASE + ruta);
   if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
   return respuesta.json();
 }
 
-// Formatear números en córdobas
 function formatearCordobas(numero) {
   return (
     "C$ " +
@@ -18,7 +16,6 @@ function formatearCordobas(numero) {
   );
 }
 
-// Cargar total de productos
 async function cargarProductos() {
   try {
     const data = await apiGet("/productos/");
@@ -29,15 +26,12 @@ async function cargarProductos() {
   }
 }
 
-// Cargar ventas del día
 async function cargarVentas() {
   try {
     const data = await apiGet("/ventas/resumen-dia");
     const total = data.total_ventas ?? data.ventas_total ?? 0;
-    const cantidad = data.numero_ventas ?? data.cantidad_ventas ?? 0;
     document.getElementById("m-ventas").textContent = formatearCordobas(total);
 
-    // Rellenar tabla de últimas ventas
     const ventas = data.ultimas_ventas ?? data.ventas ?? [];
     const tbody = document.getElementById("tabla-ventas");
 
@@ -51,12 +45,12 @@ async function cargarVentas() {
       .slice(0, 5)
       .map(
         (v) => `
-            <tr>
-                <td>${v.cliente_nombre ?? v.cliente ?? "Cliente"}</td>
-                <td>${v.hora ?? v.fecha_hora?.slice(11, 16) ?? "—"}</td>
-                <td>${formatearCordobas(v.total ?? v.monto ?? 0)}</td>
-            </tr>
-        `,
+      <tr>
+        <td>${v.cliente_nombre ?? v.cliente ?? "Cliente"}</td>
+        <td>${v.hora ?? v.fecha_hora?.slice(11, 16) ?? "—"}</td>
+        <td>${formatearCordobas(v.total ?? v.monto ?? 0)}</td>
+      </tr>
+    `,
       )
       .join("");
   } catch (e) {
@@ -64,7 +58,6 @@ async function cargarVentas() {
   }
 }
 
-// Cargar total de clientes
 async function cargarClientes() {
   try {
     const data = await apiGet("/clientes/");
@@ -75,7 +68,6 @@ async function cargarClientes() {
   }
 }
 
-// Cargar stock bajo
 async function cargarStockBajo() {
   try {
     const data = await apiGet("/productos/stock-bajo");
@@ -94,11 +86,11 @@ async function cargarStockBajo() {
       .slice(0, 5)
       .map(
         (p) => `
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                ${p.nombre ?? p.name}
-                <span class="badge bg-danger">${p.stock ?? p.cantidad ?? 0} uds.</span>
-            </li>
-        `,
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        ${p.nombre ?? p.name}
+        <span class="badge bg-danger">${p.stock ?? p.cantidad ?? 0} uds.</span>
+      </li>
+    `,
       )
       .join("");
   } catch (e) {
@@ -106,15 +98,26 @@ async function cargarStockBajo() {
   }
 }
 
-// Cargar todo al mismo tiempo
+async function cargarAnalisisIA() {
+  try {
+    const data = await apiGet("/reportes/ventas");
+    if (data.analisis_ia) {
+      document.getElementById("ia-texto").textContent = data.analisis_ia;
+      document.getElementById("ia-seccion").style.display = "";
+    }
+  } catch (e) {
+    // Si falla la IA no rompemos el dashboard
+  }
+}
+
 async function cargarDashboard() {
   await Promise.allSettled([
     cargarProductos(),
     cargarVentas(),
     cargarClientes(),
     cargarStockBajo(),
+    cargarAnalisisIA(),
   ]);
 }
 
-// Ejecutar al cargar la página
 cargarDashboard();

@@ -59,6 +59,8 @@ def editar_producto(id: int, producto: ProductoCrear):
 @router.delete("/{id}")
 def eliminar_producto(id: int):
     with get_db() as conn:
+        conn.execute("DELETE FROM venta_items WHERE producto_id = ?", (id,))
+        conn.execute("DELETE FROM movimientos WHERE producto_id = ?", (id,))
         conn.execute("DELETE FROM productos WHERE id = ?", (id,))
         return {"mensaje": "Producto eliminado"}
 

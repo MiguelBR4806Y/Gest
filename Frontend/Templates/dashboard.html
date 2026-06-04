@@ -5,7 +5,7 @@
         <link rel="stylesheet" href="/static/style.css">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
         <title>Bravo'S Gest</title>
-        <link rel="icon" href="../../img/logo.jpg" type="image/png">
+        <link rel="icon" href="/img/logo.jpg" type="image/png">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <body class="bg-dark d-flex flex-column min-vh-100">
@@ -13,7 +13,7 @@
         <nav class="navbar navbar-expand-lg bg-body-tertiary">
             <div class="container-fluid">
                 <a class="navbar-brand d-flex align-items-center" href="#">
-                    <img src="../../img/logo.jpg" class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
+                    <img src="/img/logo.jpg" class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
                     B'Gest
                 </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -22,21 +22,19 @@
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav">
                         <li class="nav-item">
-                            <a class="btn btn-outline-light ms-2">
-                            Dashboard
-                            </a>
+                            <a class="btn btn-outline-light ms-2">Dashboard</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="index.html">Home</a>
+                            <a class="nav-link" href="index.html">Home</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="inventario.html">Inventario</a>
+                            <a class="nav-link" href="inventario.html">Inventario</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="ventas.html">Ventas</a>
+                            <a class="nav-link" href="ventas.html">Ventas</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="clientes.html">Clientes</a>
+                            <a class="nav-link" href="clientes.html">Clientes</a>
                         </li>
                         <li class="nav-item d-flex align-items-center ms-2">
                             <span id="nombreUsuario" class="navbar-text text-light me-2"></span>
@@ -49,10 +47,11 @@
             </div>
         </nav>
         <!--Fin del Navbar-->
+
         <main class="container py-4 flex-grow-1">
 
-            <!-- Fila de métricas -->
-            <div class="row g-4">
+            <!-- Métricas -->
+            <div class="row g-4 mb-4">
                 <div class="col-12 col-sm-6 col-lg-3">
                     <div class="card h-100 p-3">
                         <div class="card-body">
@@ -91,8 +90,14 @@
                 </div>
             </div>
 
-            <!-- Fila de contenido -->
-            <div class="row g-4 mt-2">
+            <!-- Análisis IA -->
+            <div id="ia-seccion" class="alert alert-success mb-4" style="display:none;">
+                <small class="fw-bold">✨ Análisis IA</small>
+                <p class="mb-0 mt-1" id="ia-texto"></p>
+            </div>
+
+            <!-- Contenido -->
+            <div class="row g-4">
                 <div class="col-12 col-lg-6">
                     <div class="card p-3">
                         <div class="card-body">
@@ -130,7 +135,7 @@
 
         <footer class="bg-light bajo"> @Bravo'S Gest | 2026 | Terms of Services</footer>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-        <script src="../static/Script.js"></script>
-        <script src="../static/dashboard.js"></script>
+        <script src="/static/Script.js"></script>
+        <script src="/static/dashboard.js"></script>
     </body>
 </html>

@@ -49,5 +49,11 @@ def editar_cliente(id: int, cliente: ClienteCrear):
 @router.delete("/{id}")
 def eliminar_cliente(id: int):
     with get_db() as conn:
+        conn.execute("""
+            DELETE FROM venta_items WHERE venta_id IN (
+                SELECT id FROM ventas WHERE cliente_id = ?
+            )
+        """, (id,))
+        conn.execute("DELETE FROM ventas WHERE cliente_id = ?", (id,))
         conn.execute("DELETE FROM clientes WHERE id = ?", (id,))
         return {"mensaje": "Cliente eliminado"}

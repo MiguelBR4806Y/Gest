@@ -43,3 +43,13 @@ CREATE TABLE IF NOT EXISTS movimientos (
     cantidad INTEGER NOT NULL,
     fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Usuario por defecto
+INSERT OR IGNORE INTO usuarios (usuario, password) VALUES ('root', '1234');
