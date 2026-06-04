@@ -24,6 +24,16 @@ def crear_producto(producto: ProductoCrear):
         return {"id": cursor.lastrowid, **producto.model_dump()}
 
 
+# Stock bajo
+@router.get("/stock-bajo")
+def stock_bajo():
+    with get_db() as conn:
+        productos = conn.execute(
+            "SELECT * FROM productos WHERE stock <= 5"
+        ).fetchall()
+        return [dict(p) for p in productos]
+
+
 # Obtener un producto
 @router.get("/{id}")
 def obtener_producto(id: int):
@@ -51,16 +61,6 @@ def eliminar_producto(id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM productos WHERE id = ?", (id,))
         return {"mensaje": "Producto eliminado"}
-
-
-# Stock bajo
-@router.get("/stock-bajo")
-def stock_bajo():
-    with get_db() as conn:
-        productos = conn.execute(
-            "SELECT * FROM productos WHERE stock <= 5"
-        ).fetchall()
-        return [dict(p) for p in productos]
 
 
 # Movimiento de inventario

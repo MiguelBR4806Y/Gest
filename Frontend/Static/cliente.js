@@ -42,6 +42,16 @@ async function cargarResumen() {
   }
 }
 
+async function apiPost(ruta, datos) {
+  const respuesta = await fetch(BASE + ruta, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(datos),
+  });
+  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+  return respuesta.json();
+}
+
 // Cargar tabla de clientes
 async function cargarClientes() {
   try {
@@ -98,6 +108,31 @@ async function eliminarCliente(id) {
     cargarPagina();
   } catch (e) {
     alert("Error al eliminar");
+  }
+}
+
+async function agregarCliente() {
+  const nombre = document.getElementById("c-nombre").value.trim();
+  const telefono = document.getElementById("c-telefono").value.trim();
+  const credito_limite =
+    parseFloat(document.getElementById("c-credito").value) || 0;
+
+  if (!nombre) {
+    alert("El nombre es obligatorio");
+    return;
+  }
+
+  try {
+    await apiPost("/clientes/", { nombre, telefono, credito_limite });
+    bootstrap.Modal.getInstance(
+      document.getElementById("modalAgregarCliente"),
+    ).hide();
+    document.getElementById("c-nombre").value = "";
+    document.getElementById("c-telefono").value = "";
+    document.getElementById("c-credito").value = "0";
+    cargarPagina();
+  } catch (e) {
+    alert("Error al guardar el cliente");
   }
 }
 

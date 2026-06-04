@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 *.db
 .env
-README.md.DS_Store
+README.md
+.DS_Store

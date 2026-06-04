@@ -2,7 +2,7 @@
 <html lang="es" data-bs-theme="dark">
     <head>
         <meta charset="UTF-8">
-        <link rel="stylesheet" href="../static/style.css">
+        <link rel="stylesheet" href="/static/style.css">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
         <title>Bravo'S Gest</title>
         <link rel="icon" href="/img/logo.jpg" type="image/png">
@@ -13,7 +13,7 @@
         <nav class="navbar navbar-expand-lg bg-body-tertiary">
             <div class="container-fluid">
                 <a class="navbar-brand d-flex align-items-center" href="#">
-                    <img src="../../img/logo.jpg" class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
+                    <img src="/img/logo.jpg" class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
                     B'Gest
                 </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -22,21 +22,19 @@
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav">
                         <li class="nav-item">
-                            <a class="btn btn-outline-light ms-2">
-                            Ventas
-                            </a>
+                            <a class="btn btn-outline-light ms-2">Ventas</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="index.html">Home</a>
+                            <a class="nav-link" href="index.html">Home</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="dashboard.html">Dashboard</a>
+                            <a class="nav-link" href="dashboard.html">Dashboard</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="inventario.html">Inventario</a>
+                            <a class="nav-link" href="inventario.html">Inventario</a>
                         </li>
                         <li class="nav-item">
-                        <a class="nav-link" href="clientes.html">Clientes</a>
+                            <a class="nav-link" href="clientes.html">Clientes</a>
                         </li>
                         <li class="nav-item d-flex align-items-center ms-2">
                             <span id="nombreUsuario" class="navbar-text text-light me-2"></span>
@@ -49,15 +47,86 @@
             </div>
         </nav>
         <!--Fin del Navbar-->
+
+        <!-- Modal Nueva Venta -->
+        <div class="modal fade" id="modalNuevaVenta" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Nueva venta</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+
+                        <div class="mb-3">
+                            <label class="form-label">Cliente (opcional)</label>
+                            <select class="form-select" id="v-cliente">
+                                <option value="">Sin cliente</option>
+                            </select>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label">Producto</label>
+                                <select class="form-select" id="v-producto">
+                                    <option value="">Seleccionar...</option>
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label">Cantidad</label>
+                                <input type="number" class="form-control" id="v-cantidad" value="1" min="1">
+                            </div>
+                            <div class="col-3 d-flex align-items-end">
+                                <button class="btn btn-outline-success w-100" onclick="agregarItem()">+ Agregar</button>
+                            </div>
+                        </div>
+
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio unit.</th>
+                                    <th>Subtotal</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="items-body">
+                                <tr>
+                                    <td colspan="5" class="text-center text-secondary">Sin productos agregados</td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" class="text-end fw-bold">Total:</td>
+                                    <td colspan="2" class="fw-bold text-success" id="modal-total">C$ 0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-success" onclick="registrarVenta()">Registrar venta</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        <!-- Fin Modal Nueva Venta -->
+
         <main class="container py-4 flex-grow-1">
 
-            <!-- Encabezado -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>Ventas</h2>
-                <button class="btn btn-success">+ Nueva venta</button>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevaVenta" onclick="cargarSelectores()">
+                    + Nueva venta
+                </button>
             </div>
 
-            <!-- Resumen del día -->
             <div class="row g-4 mb-4">
                 <div class="col-12 col-sm-4">
                     <div class="card p-3 text-center">
@@ -88,7 +157,6 @@
                 </div>
             </div>
 
-            <!-- Tabla de ventas -->
             <div class="card p-3">
                 <div class="card-body">
                     <table class="table table-hover">
@@ -112,9 +180,9 @@
             </div>
 
         </main>
-        <footer class="bg-light bajo"> @Bravo'S Gest | 2026 | Terms of Services</footer>
+        <footer class="bg-dark bajo text-light"> @Bravo'S Gest | 2026 | Terms of Services</footer>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-        <script src="../Static/Script.js"></script>
-        <script src="../Static/ventas.js"></script>
+        <script src="/static/Script.js"></script>
+        <script src="/static/ventas.js"></script>
     </body>
 </html>

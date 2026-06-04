@@ -6,6 +6,16 @@ async function apiGet(ruta) {
   return respuesta.json();
 }
 
+async function apiPost(ruta, datos) {
+  const respuesta = await fetch(BASE + ruta, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(datos),
+  });
+  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+  return respuesta.json();
+}
+
 function formatearCordobas(numero) {
   return (
     "C$ " +
@@ -16,7 +26,6 @@ function formatearCordobas(numero) {
   );
 }
 
-// Cargar resumen del día
 async function cargarResumen() {
   try {
     const data = await apiGet("/ventas/resumen-dia");
@@ -35,7 +44,6 @@ async function cargarResumen() {
   }
 }
 
-// Cargar tabla de ventas
 async function cargarVentas() {
   try {
     const data = await apiGet("/ventas/resumen-dia");
@@ -51,18 +59,17 @@ async function cargarVentas() {
     tbody.innerHTML = ventas
       .map(
         (v, i) => `
-            <tr>
-                <td>${i + 1}</td>
-                <td>${v.cliente_nombre ?? v.cliente ?? "Cliente"}</td>
-                <td>${v.productos ?? "—"}</td>
-                <td>${v.hora ?? v.fecha_hora?.slice(11, 16) ?? "—"}</td>
-                <td>${formatearCordobas(v.total ?? v.monto ?? 0)}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-info" 
-                            onclick="verVenta(${v.id})">Ver</button>
-                </td>
-            </tr>
-        `,
+      <tr>
+        <td>${i + 1}</td>
+        <td>${v.cliente_nombre ?? v.cliente ?? "Cliente"}</td>
+        <td>${v.productos ?? "—"}</td>
+        <td>${v.hora ?? v.fecha_hora?.slice(11, 16) ?? "—"}</td>
+        <td>${formatearCordobas(v.total ?? v.monto ?? 0)}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-info" onclick="verVenta(${v.id})">Ver</button>
+        </td>
+      </tr>
+    `,
       )
       .join("");
   } catch (e) {
@@ -71,13 +78,123 @@ async function cargarVentas() {
   }
 }
 
-// Ver detalle de una venta
 function verVenta(id) {
-  // Por implementar en Semana 3
   alert("Ver venta #" + id);
 }
 
-// Ejecutar al cargar la página
+let itemsVenta = [];
+
+async function cargarSelectores() {
+  const clientes = await apiGet("/clientes/");
+  const selectCliente = document.getElementById("v-cliente");
+  selectCliente.innerHTML = '<option value="">Sin cliente</option>';
+  clientes.forEach((c) => {
+    selectCliente.innerHTML += `<option value="${c.id}">${c.nombre}</option>`;
+  });
+
+  const productos = await apiGet("/productos/");
+  const selectProducto = document.getElementById("v-producto");
+  selectProducto.innerHTML = '<option value="">Seleccionar...</option>';
+  productos.forEach((p) => {
+    selectProducto.innerHTML += `<option value="${p.id}" data-precio="${p.precio}">${p.nombre} (C$ ${p.precio})</option>`;
+  });
+
+  itemsVenta = [];
+  actualizarTablaItems();
+}
+
+function agregarItem() {
+  const select = document.getElementById("v-producto");
+  const id = parseInt(select.value);
+  const nombre = select.options[select.selectedIndex].text;
+  const precio = parseFloat(
+    select.options[select.selectedIndex].dataset.precio,
+  );
+  const cantidad = parseInt(document.getElementById("v-cantidad").value) || 1;
+
+  if (!id) {
+    alert("Selecciona un producto");
+    return;
+  }
+
+  const existente = itemsVenta.find((i) => i.producto_id === id);
+  if (existente) {
+    existente.cantidad += cantidad;
+  } else {
+    itemsVenta.push({
+      producto_id: id,
+      nombre,
+      cantidad,
+      precio_unitario: precio,
+    });
+  }
+
+  actualizarTablaItems();
+}
+
+function actualizarTablaItems() {
+  const tbody = document.getElementById("items-body");
+
+  if (itemsVenta.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="5" class="text-center text-secondary">Sin productos agregados</td></tr>';
+    document.getElementById("modal-total").textContent = "C$ 0.00";
+    return;
+  }
+
+  tbody.innerHTML = itemsVenta
+    .map(
+      (item, i) => `
+    <tr>
+      <td>${item.nombre}</td>
+      <td>${item.cantidad}</td>
+      <td>C$ ${item.precio_unitario}</td>
+      <td>C$ ${(item.cantidad * item.precio_unitario).toFixed(2)}</td>
+      <td><button class="btn btn-sm btn-outline-danger" onclick="quitarItem(${i})">✕</button></td>
+    </tr>
+  `,
+    )
+    .join("");
+
+  const total = itemsVenta.reduce(
+    (acc, i) => acc + i.cantidad * i.precio_unitario,
+    0,
+  );
+  document.getElementById("modal-total").textContent = formatearCordobas(total);
+}
+
+function quitarItem(index) {
+  itemsVenta.splice(index, 1);
+  actualizarTablaItems();
+}
+
+async function registrarVenta() {
+  if (itemsVenta.length === 0) {
+    alert("Agrega al menos un producto");
+    return;
+  }
+
+  const cliente_id = document.getElementById("v-cliente").value || null;
+
+  try {
+    await apiPost("/ventas/", {
+      cliente_id: cliente_id ? parseInt(cliente_id) : null,
+      items: itemsVenta.map((i) => ({
+        producto_id: i.producto_id,
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+      })),
+    });
+    bootstrap.Modal.getInstance(
+      document.getElementById("modalNuevaVenta"),
+    ).hide();
+    itemsVenta = [];
+    cargarPagina();
+  } catch (e) {
+    alert("Error al registrar la venta");
+  }
+}
+
 async function cargarPagina() {
   await Promise.allSettled([cargarResumen(), cargarVentas()]);
 }
