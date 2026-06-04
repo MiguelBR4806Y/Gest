@@ -1,0 +1,1 @@
+from Backend.db.database import inicializar_db

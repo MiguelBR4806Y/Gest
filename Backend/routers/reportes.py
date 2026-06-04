@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from backend.db.database import get_db
-from backend.ai.ia_service import analizar_ventas
+from Backend.db.database import get_db
+from Backend.ai.ia_service import analizar_ventas
 from datetime import date
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])

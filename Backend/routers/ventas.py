@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from backend.db.database import get_db
-from backend.models.schemas import VentaCrear
+from Backend.db.database import get_db
+from Backend.models.schema import VentaCrear
 from datetime import datetime, date
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])

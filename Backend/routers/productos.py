@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from backend.db.database import get_db
-from backend.models.schemas import ProductoCrear
+from Backend.db.database import get_db
+from Backend.models.schema import ProductoCrear
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
