@@ -3,8 +3,10 @@ const temaGuardado = localStorage.getItem("tema") || "dark";
 document.documentElement.setAttribute("data-bs-theme", temaGuardado);
 document.body.classList.add("bg-" + temaGuardado);
 
-// ── Usuarios locales ──
-const USUARIOS_LOCALES = [{ usuario: "root", password: "1234" }];
+// ── Obtener token ──
+function getToken() {
+  return sessionStorage.getItem("token") ?? "";
+}
 
 // ── Login ──
 function iniciarSesion() {
@@ -13,21 +15,6 @@ function iniciarSesion() {
 
   if (!usuario || !password) {
     alert("Por favor llena todos los campos");
-    return;
-  }
-
-  const esRoot = USUARIOS_LOCALES.find(
-    (u) => u.usuario === usuario && u.password === password,
-  );
-
-  if (esRoot) {
-    sessionStorage.setItem("usuario", usuario);
-    sessionStorage.setItem("logueado", "true");
-    const modal = bootstrap.Modal.getInstance(
-      document.getElementById("modalLogin"),
-    );
-    if (modal) modal.hide();
-    window.location.href = "dashboard.html";
     return;
   }
 
@@ -47,8 +34,12 @@ async function verificarConBackend(usuario, password) {
       return;
     }
 
-    sessionStorage.setItem("usuario", usuario);
+    const data = await respuesta.json();
+    sessionStorage.setItem("token", data.token);
+    sessionStorage.setItem("usuario", data.usuario);
+    sessionStorage.setItem("nombre_negocio", data.nombre_negocio);
     sessionStorage.setItem("logueado", "true");
+
     const modal = bootstrap.Modal.getInstance(
       document.getElementById("modalLogin"),
     );
@@ -128,6 +119,50 @@ async function registrarse() {
   } catch (e) {
     alert("No se pudo conectar con el servidor");
   }
+}
+
+// ── Helpers de API con token ──
+async function apiGet(ruta) {
+    const respuesta = await fetch("http://127.0.0.1:8000" + ruta, {
+        headers: { "Authorization": "Bearer " + getToken() }
+    });
+    if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+    return respuesta.json();
+}
+
+async function apiPost(ruta, datos) {
+    const respuesta = await fetch("http://127.0.0.1:8000" + ruta, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + getToken()
+        },
+        body: JSON.stringify(datos),
+    });
+    if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+    return respuesta.json();
+}
+
+async function apiPut(ruta, datos) {
+    const respuesta = await fetch("http://127.0.0.1:8000" + ruta, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + getToken()
+        },
+        body: JSON.stringify(datos),
+    });
+    if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+    return respuesta.json();
+}
+
+async function apiDelete(ruta) {
+    const respuesta = await fetch("http://127.0.0.1:8000" + ruta, {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + getToken() }
+    });
+    if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
+    return respuesta.json();
 }
 
 // ── Ejecutar al cargar ──

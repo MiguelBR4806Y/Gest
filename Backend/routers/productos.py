@@ -1,73 +1,83 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from Backend.db.database import get_db
 from Backend.models.schema import ProductoCrear
+from Backend.routers.auth import verificar_token
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
 
-# Listar todos los productos
 @router.get("/")
-def listar_productos():
-    with get_db() as conn:
-        productos = conn.execute("SELECT * FROM productos").fetchall()
-        return [dict(p) for p in productos]
-
-
-# Crear producto
-@router.post("/")
-def crear_producto(producto: ProductoCrear):
-    with get_db() as conn:
-        cursor = conn.execute(
-            "INSERT INTO productos (nombre, categoria, stock, precio) VALUES (?, ?, ?, ?)",
-            (producto.nombre, producto.categoria, producto.stock, producto.precio)
-        )
-        return {"id": cursor.lastrowid, **producto.model_dump()}
-
-
-# Stock bajo
-@router.get("/stock-bajo")
-def stock_bajo():
+def listar_productos(usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         productos = conn.execute(
-            "SELECT * FROM productos WHERE stock <= 5"
+            "SELECT * FROM productos WHERE usuario_id = ?", (usuario_id,)
         ).fetchall()
         return [dict(p) for p in productos]
 
 
-# Obtener un producto
-@router.get("/{id}")
-def obtener_producto(id: int):
+@router.post("/")
+def crear_producto(producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
-        p = conn.execute("SELECT * FROM productos WHERE id = ?", (id,)).fetchone()
+        cursor = conn.execute(
+            "INSERT INTO productos (usuario_id, nombre, categoria, stock, precio) VALUES (?, ?, ?, ?, ?)",
+            (usuario_id, producto.nombre, producto.categoria, producto.stock, producto.precio)
+        )
+        return {"id": cursor.lastrowid, **producto.model_dump()}
+
+
+@router.get("/stock-bajo")
+def stock_bajo(usuario_id: int = Depends(verificar_token)):
+    with get_db() as conn:
+        productos = conn.execute(
+            "SELECT * FROM productos WHERE usuario_id = ? AND stock <= 5", (usuario_id,)
+        ).fetchall()
+        return [dict(p) for p in productos]
+
+
+@router.get("/{id}")
+def obtener_producto(id: int, usuario_id: int = Depends(verificar_token)):
+    with get_db() as conn:
+        p = conn.execute(
+            "SELECT * FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id)
+        ).fetchone()
         if not p:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
         return dict(p)
 
 
-# Editar producto
 @router.put("/{id}")
-def editar_producto(id: int, producto: ProductoCrear):
+def editar_producto(id: int, producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         conn.execute(
-            "UPDATE productos SET nombre=?, categoria=?, stock=?, precio=? WHERE id=?",
-            (producto.nombre, producto.categoria, producto.stock, producto.precio, id)
+            "UPDATE productos SET nombre=?, categoria=?, stock=?, precio=? WHERE id=? AND usuario_id=?",
+            (producto.nombre, producto.categoria, producto.stock, producto.precio, id, usuario_id)
         )
         return {"id": id, **producto.model_dump()}
 
 
-# Eliminar producto
 @router.delete("/{id}")
-def eliminar_producto(id: int):
+def eliminar_producto(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         conn.execute("DELETE FROM venta_items WHERE producto_id = ?", (id,))
         conn.execute("DELETE FROM movimientos WHERE producto_id = ?", (id,))
-        conn.execute("DELETE FROM productos WHERE id = ?", (id,))
+        conn.execute("DELETE FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id))
         return {"mensaje": "Producto eliminado"}
 
 
-# Movimiento de inventario
+@router.get("/{id}/movimientos")
+def listar_movimientos(id: int, usuario_id: int = Depends(verificar_token)):
+    with get_db() as conn:
+        movimientos = conn.execute("""
+            SELECT tipo, cantidad, fecha_hora
+            FROM movimientos
+            WHERE producto_id = ?
+            ORDER BY fecha_hora DESC
+        """, (id,)).fetchall()
+        return [dict(m) for m in movimientos]
+
+
 @router.post("/{id}/movimiento")
-def registrar_movimiento(id: int, movimiento: dict):
+def registrar_movimiento(id: int, movimiento: dict, usuario_id: int = Depends(verificar_token)):
     tipo = movimiento.get("tipo")
     cantidad = movimiento.get("cantidad", 0)
 
@@ -75,7 +85,9 @@ def registrar_movimiento(id: int, movimiento: dict):
         raise HTTPException(status_code=400, detail="Tipo inválido")
 
     with get_db() as conn:
-        p = conn.execute("SELECT stock FROM productos WHERE id = ?", (id,)).fetchone()
+        p = conn.execute(
+            "SELECT stock FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id)
+        ).fetchone()
         if not p:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
 
@@ -90,14 +102,3 @@ def registrar_movimiento(id: int, movimiento: dict):
             (id, tipo, cantidad)
         )
         return {"stock_actual": nuevo_stock}
-    
-@router.get("/{id}/movimientos")
-def listar_movimientos(id: int):
-    with get_db() as conn:
-        movimientos = conn.execute("""
-            SELECT tipo, cantidad, fecha_hora
-            FROM movimientos
-            WHERE producto_id = ?
-            ORDER BY fecha_hora DESC
-        """, (id,)).fetchall()
-        return [dict(m) for m in movimientos]

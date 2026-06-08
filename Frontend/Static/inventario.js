@@ -1,30 +1,4 @@
-const BASE = "http://127.0.0.1:8000";
 
-async function apiGet(ruta) {
-  const respuesta = await fetch(BASE + ruta);
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
-
-async function apiPost(ruta, datos) {
-  const respuesta = await fetch(BASE + ruta, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
-  });
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
-
-async function apiPut(ruta, datos) {
-  const respuesta = await fetch(BASE + ruta, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
-  });
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
 
 async function cargarInventario() {
   try {
@@ -106,7 +80,7 @@ async function guardarEdicionProducto() {
 async function eliminarProducto(id) {
   if (!confirm("¿Seguro que quieres eliminar este producto?")) return;
   try {
-    await fetch(BASE + "/productos/" + id, { method: "DELETE" });
+    await apiDelete("/productos/" + id);
     cargarInventario();
   } catch (e) {
     alert("Error al eliminar");

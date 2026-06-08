@@ -1,22 +1,20 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from Backend.db.database import get_db
 from Backend.models.schema import VentaCrear
+from Backend.routers.auth import verificar_token
 from datetime import datetime, date
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])
 
 
-# Registrar venta completa
 @router.post("/")
-def crear_venta(venta: VentaCrear):
+def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
-
-        # Calcular total y verificar stock
         total = 0
         for item in venta.items:
             p = conn.execute(
-                "SELECT stock, precio FROM productos WHERE id = ?",
-                (item.producto_id,)
+                "SELECT stock, precio FROM productos WHERE id = ? AND usuario_id = ?",
+                (item.producto_id, usuario_id)
             ).fetchone()
 
             if not p:
@@ -26,11 +24,10 @@ def crear_venta(venta: VentaCrear):
 
             total += item.cantidad * item.precio_unitario
 
-        # Verificar crédito si hay cliente
         if venta.cliente_id:
             c = conn.execute(
-                "SELECT credito_limite, credito_usado FROM clientes WHERE id = ?",
-                (venta.cliente_id,)
+                "SELECT credito_limite, credito_usado FROM clientes WHERE id = ? AND usuario_id = ?",
+                (venta.cliente_id, usuario_id)
             ).fetchone()
 
             if not c:
@@ -40,14 +37,12 @@ def crear_venta(venta: VentaCrear):
             if total > disponible:
                 raise HTTPException(status_code=400, detail="Crédito insuficiente")
 
-        # Insertar venta
         cursor = conn.execute(
-            "INSERT INTO ventas (cliente_id, total) VALUES (?, ?)",
-            (venta.cliente_id, total)
+            "INSERT INTO ventas (usuario_id, cliente_id, total) VALUES (?, ?, ?)",
+            (usuario_id, venta.cliente_id, total)
         )
         venta_id = cursor.lastrowid
 
-        # Insertar items y descontar stock
         for item in venta.items:
             conn.execute(
                 "INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)",
@@ -57,8 +52,11 @@ def crear_venta(venta: VentaCrear):
                 "UPDATE productos SET stock = stock - ? WHERE id = ?",
                 (item.cantidad, item.producto_id)
             )
+            conn.execute(
+                "INSERT INTO movimientos (producto_id, tipo, cantidad) VALUES (?, ?, ?)",
+                (item.producto_id, "salida", item.cantidad)
+            )
 
-        # Actualizar crédito usado del cliente
         if venta.cliente_id:
             conn.execute(
                 "UPDATE clientes SET credito_usado = credito_usado + ? WHERE id = ?",
@@ -68,31 +66,24 @@ def crear_venta(venta: VentaCrear):
         return {"id": venta_id, "total": total}
 
 
-# Resumen del día
 @router.get("/resumen-dia")
-def resumen_dia(fecha: str = Query(default=None)):
+def resumen_dia(usuario_id: int = Depends(verificar_token), fecha: str = Query(default=None)):
     with get_db() as conn:
         hoy = fecha if fecha else date.today().isoformat()
 
         resumen = conn.execute("""
-            SELECT 
-                COUNT(*) as numero_ventas,
-                COALESCE(SUM(total), 0) as total_ventas
+            SELECT COUNT(*) as numero_ventas, COALESCE(SUM(total), 0) as total_ventas
             FROM ventas
-            WHERE DATE(fecha_hora) = ?
-        """, (hoy,)).fetchone()
+            WHERE usuario_id = ? AND DATE(fecha_hora) = ?
+        """, (usuario_id, hoy)).fetchone()
 
         ultimas = conn.execute("""
-            SELECT 
-                v.id,
-                v.total,
-                v.fecha_hora,
-                c.nombre as cliente_nombre
+            SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
-            WHERE DATE(v.fecha_hora) = ?
+            WHERE v.usuario_id = ? AND DATE(v.fecha_hora) = ?
             ORDER BY v.fecha_hora DESC
-        """, (hoy,)).fetchall()
+        """, (usuario_id, hoy)).fetchall()
 
         return {
             "numero_ventas": resumen["numero_ventas"],
@@ -100,29 +91,29 @@ def resumen_dia(fecha: str = Query(default=None)):
             "ultimas_ventas": [dict(u) for u in ultimas]
         }
 
-# Listar todas las ventas
+
 @router.get("/")
-def listar_ventas():
+def listar_ventas(usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         ventas = conn.execute("""
             SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
+            WHERE v.usuario_id = ?
             ORDER BY v.fecha_hora DESC
-        """).fetchall()
+        """, (usuario_id,)).fetchall()
         return [dict(v) for v in ventas]
 
 
-# Ver detalle de una venta
 @router.get("/{id}")
-def obtener_venta(id: int):
+def obtener_venta(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         v = conn.execute("""
             SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
-            WHERE v.id = ?
-        """, (id,)).fetchone()
+            WHERE v.id = ? AND v.usuario_id = ?
+        """, (id, usuario_id)).fetchone()
 
         if not v:
             raise HTTPException(status_code=404, detail="Venta no encontrada")
@@ -134,7 +125,4 @@ def obtener_venta(id: int):
             WHERE vi.venta_id = ?
         """, (id,)).fetchall()
 
-        return {
-            **dict(v),
-            "items": [dict(i) for i in items]
-        }
+        return {**dict(v), "items": [dict(i) for i in items]}

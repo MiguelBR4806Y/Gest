@@ -1,20 +1,4 @@
-const BASE = "http://127.0.0.1:8000";
 
-async function apiGet(ruta) {
-  const respuesta = await fetch(BASE + ruta);
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
-
-async function apiPost(ruta, datos) {
-  const respuesta = await fetch(BASE + ruta, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datos),
-  });
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
 
 function formatearCordobas(numero) {
   return (
@@ -95,7 +79,10 @@ async function cargarVentas() {
 // CAMBIO: ahora abre el PDF de la factura en nueva pestaña
 function verVenta(id) {
   const usuario = sessionStorage.getItem("usuario") ?? "root";
-  window.open(BASE + "/facturas/" + id + "?usuario=" + usuario, "_blank");
+  window.open(
+    "http://127.0.0.1:8000/facturas/" + id + "?usuario=" + usuario,
+    "_blank",
+  );
 }
 
 let itemsVenta = [];

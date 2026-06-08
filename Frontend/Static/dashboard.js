@@ -1,10 +1,4 @@
-const BASE = "http://127.0.0.1:8000";
 
-async function apiGet(ruta) {
-  const respuesta = await fetch(BASE + ruta);
-  if (!respuesta.ok) throw new Error("Error HTTP: " + respuesta.status);
-  return respuesta.json();
-}
 
 function formatearCordobas(numero) {
   return (
