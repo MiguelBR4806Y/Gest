@@ -90,3 +90,14 @@ def registrar_movimiento(id: int, movimiento: dict):
             (id, tipo, cantidad)
         )
         return {"stock_actual": nuevo_stock}
+    
+@router.get("/{id}/movimientos")
+def listar_movimientos(id: int):
+    with get_db() as conn:
+        movimientos = conn.execute("""
+            SELECT tipo, cantidad, fecha_hora
+            FROM movimientos
+            WHERE producto_id = ?
+            ORDER BY fecha_hora DESC
+        """, (id,)).fetchall()
+        return [dict(m) for m in movimientos]

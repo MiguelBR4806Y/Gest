@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from Backend.db.database import get_db
 from Backend.models.schema import VentaCrear
 from datetime import datetime, date
@@ -70,9 +70,9 @@ def crear_venta(venta: VentaCrear):
 
 # Resumen del día
 @router.get("/resumen-dia")
-def resumen_dia():
+def resumen_dia(fecha: str = Query(default=None)):
     with get_db() as conn:
-        hoy = date.today().isoformat()
+        hoy = fecha if fecha else date.today().isoformat()
 
         resumen = conn.execute("""
             SELECT 
@@ -92,7 +92,6 @@ def resumen_dia():
             LEFT JOIN clientes c ON v.cliente_id = c.id
             WHERE DATE(v.fecha_hora) = ?
             ORDER BY v.fecha_hora DESC
-            LIMIT 5
         """, (hoy,)).fetchall()
 
         return {
@@ -100,7 +99,6 @@ def resumen_dia():
             "total_ventas": resumen["total_ventas"],
             "ultimas_ventas": [dict(u) for u in ultimas]
         }
-
 
 # Listar todas las ventas
 @router.get("/")

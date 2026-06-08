@@ -54,6 +54,7 @@ async function cargarInventario() {
         <td>
           <button class="btn btn-sm btn-outline-warning me-1" onclick="editarProducto(${p.id})">Editar</button>
           <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${p.id})">Eliminar</button>
+          <button class="btn btn-sm btn-outline-info me-1" onclick="verHistorial(${p.id})">Historial</button>
         </td>
       </tr>
     `,
@@ -135,6 +136,34 @@ async function agregarProducto() {
     cargarInventario();
   } catch (e) {
     alert("Error al guardar el producto");
+  }
+}
+
+async function verHistorial(id) {
+  try {
+    const data = await apiGet("/productos/" + id + "/movimientos");
+    const tbody = document.getElementById("tabla-historial");
+
+    if (data.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="3" class="text-center text-secondary">Sin movimientos</td></tr>';
+    } else {
+      tbody.innerHTML = data.map((m) => `
+      <tr>
+          <td>
+              <span class="badge ${m.tipo === "entrada" ? "bg-success" : "bg-danger"}">
+                  ${m.tipo}
+              </span>
+          </td>
+          <td>${m.cantidad}</td>
+          <td>${m.fecha_hora?.slice(0, 16) ?? "—"}</td>
+      </tr>
+      `).join("");
+    }
+
+    new bootstrap.Modal(document.getElementById("modalHistorial")).show();
+  } catch (e) {
+    alert("Error al cargar el historial");
   }
 }
 

@@ -8,6 +8,28 @@ class LoginData(BaseModel):
     usuario: str
     password: str
 
+class RegistroData(BaseModel):
+    usuario: str
+    password: str
+    nombre_negocio: str = "Mi Negocio"
+
+@router.post("/registro")
+def registro(datos: RegistroData):
+    with get_db() as conn:
+        existente = conn.execute(
+            "SELECT id FROM usuarios WHERE usuario = ?",
+            (datos.usuario,)
+        ).fetchone()
+
+        if existente:
+            raise HTTPException(status_code=400, detail="El usuario ya existe")
+
+        conn.execute(
+            "INSERT INTO usuarios (usuario, password, nombre_negocio) VALUES (?, ?, ?)",
+            (datos.usuario, datos.password, datos.nombre_negocio)
+        )
+        return {"mensaje": "Usuario registrado exitosamente"}
+
 @router.post("/login")
 def login(datos: LoginData):
     with get_db() as conn:

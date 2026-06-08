@@ -123,6 +123,39 @@
         </div>
         <!-- Fin Modal Editar Producto -->
 
+        <!-- Modal Historial -->
+            <div class="modal fade" id="modalHistorial" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Historial de movimientos</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Tipo</th>
+                                        <th>Cantidad</th>
+                                        <th>Fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-historial">
+                                    <tr>
+                                        <td colspan="3" class="text-center text-secondary">Cargando...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <!-- Fin Modal Historial -->
+
+
         <main class="container py-4 flex-grow-1">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>Inventario</h2>
@@ -130,6 +163,7 @@
                     + Agregar producto
                 </button>
             </div>
+
             <div class="card p-3">
                 <div class="card-body">
                     <table class="table table-hover">
@@ -151,6 +185,7 @@
                     </table>
                 </div>
             </div>
+
         </main>
 
         <footer class="bg-light bajo"> @Bravo'S Gest | 2026 | Terms of Services</footer>

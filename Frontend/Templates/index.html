@@ -119,7 +119,8 @@
                     </div>
                     <div class="modal-footer justify-content-center">
                         <span class="text-secondary" style="font-size:13px;">
-                            ¿No tienes cuenta? <a href="#">Regístrate</a>
+                            ¿No tienes cuenta? 
+                            <a href="#" onclick="abrirRegistro()">Regístrate</a>
                         </span>
                     </div>
                 </div>
@@ -127,6 +128,37 @@
         </div>
 
         <!-- Fin Modal del Login-->
+
+        <!-- Modal Registro -->
+        <div class="modal fade" id="modalRegistro" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Crear cuenta</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre del negocio *</label>
+                            <input type="text" class="form-control" id="r-negocio" placeholder="Ej: Tienda Los Andes">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Usuario *</label>
+                            <input type="text" class="form-control" id="r-usuario" placeholder="tu_usuario">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Contraseña *</label>
+                            <input type="password" class="form-control" id="r-password" placeholder="••••••••">
+                        </div>
+                    </div>
+                    <div class="modal-footer justify-content-between">
+                        <a href="#" onclick="volverLogin()">¿Ya tienes cuenta? Inicia sesión</a>
+                        <button type="button" class="btn btn-success" onclick="registrarse()">Crear cuenta</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Fin Modal Registro -->
 
         <main class="container py-4 flex-grow-1">
 
@@ -182,6 +214,6 @@
         </main>
         <footer class="bg-light bajo"> @Bravo'S Gest | 2026 | Terms of Services</footer>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-        <script src="../static/Script.js"></script>
+        <script src="/static/Script.js"></script>
     </body>
 </html>

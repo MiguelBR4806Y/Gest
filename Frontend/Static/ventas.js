@@ -26,11 +26,21 @@ function formatearCordobas(numero) {
   );
 }
 
+function getFecha() {
+  const input = document.getElementById("filtro-fecha");
+  if (!input || !input.value) {
+    // Por defecto hoy
+    return new Date().toISOString().slice(0, 10);
+  }
+  return input.value;
+}
+
 async function cargarResumen() {
   try {
-    const data = await apiGet("/ventas/resumen-dia");
-    const total = data.total_ventas ?? data.ventas_total ?? 0;
-    const cantidad = data.numero_ventas ?? data.cantidad_ventas ?? 0;
+    const fecha = getFecha();
+    const data = await apiGet("/ventas/resumen-dia?fecha=" + fecha);
+    const total = data.total_ventas ?? 0;
+    const cantidad = data.numero_ventas ?? 0;
     const promedio = cantidad > 0 ? total / cantidad : 0;
 
     document.getElementById("v-total").textContent = formatearCordobas(total);
@@ -46,13 +56,14 @@ async function cargarResumen() {
 
 async function cargarVentas() {
   try {
-    const data = await apiGet("/ventas/resumen-dia");
-    const ventas = data.ultimas_ventas ?? data.ventas ?? [];
+    const fecha = getFecha();
+    const data = await apiGet("/ventas/resumen-dia?fecha=" + fecha);
+    const ventas = data.ultimas_ventas ?? [];
     const tbody = document.getElementById("tabla-ventas");
 
     if (ventas.length === 0) {
       tbody.innerHTML =
-        '<tr><td colspan="6" class="text-center text-secondary">Sin ventas hoy</td></tr>';
+        '<tr><td colspan="6" class="text-center text-secondary">Sin ventas para esta fecha</td></tr>';
       return;
     }
 
@@ -61,25 +72,30 @@ async function cargarVentas() {
         (v, i) => `
       <tr>
         <td>${i + 1}</td>
-        <td>${v.cliente_nombre ?? v.cliente ?? "Cliente"}</td>
+        <td>${v.cliente_nombre ?? "Cliente"}</td>
         <td>${v.productos ?? "—"}</td>
-        <td>${v.hora ?? v.fecha_hora?.slice(11, 16) ?? "—"}</td>
-        <td>${formatearCordobas(v.total ?? v.monto ?? 0)}</td>
+        <td>${v.fecha_hora?.slice(11, 16) ?? "—"}</td>
+        <td>${formatearCordobas(v.total ?? 0)}</td>
         <td>
-          <button class="btn btn-sm btn-outline-info" onclick="verVenta(${v.id})">Ver</button>
+          <button class="btn btn-sm btn-outline-success" onclick="verVenta(${v.id})">
+            Factura
+          </button>
         </td>
       </tr>
     `,
       )
       .join("");
-  } catch (e) {
+  } 
+  catch (e) {
     document.getElementById("tabla-ventas").innerHTML =
       '<tr><td colspan="6" class="text-center text-danger">Error al cargar</td></tr>';
   }
 }
 
+// CAMBIO: ahora abre el PDF de la factura en nueva pestaña
 function verVenta(id) {
-  alert("Ver venta #" + id);
+  const usuario = sessionStorage.getItem("usuario") ?? "root";
+  window.open(BASE + "/facturas/" + id + "?usuario=" + usuario, "_blank");
 }
 
 let itemsVenta = [];

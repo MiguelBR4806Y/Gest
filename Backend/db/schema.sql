@@ -48,8 +48,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
+    nombre_negocio TEXT DEFAULT 'Mi Negocio',
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Usuario por defecto
-INSERT OR IGNORE INTO usuarios (usuario, password) VALUES ('root', '1234');
+INSERT OR IGNORE INTO usuarios (usuario, password, nombre_negocio) VALUES ('root', '1234', 'Bravo''s Gest');

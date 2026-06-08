@@ -36,7 +36,7 @@ function iniciarSesion() {
 
 async function verificarConBackend(usuario, password) {
   try {
-    const respuesta = await fetch("http://localhost:8000/auth/login", {
+    const respuesta = await fetch("http://127.0.0.1:8000/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ usuario, password }),
@@ -88,6 +88,46 @@ function mostrarUsuario() {
 function cerrarSesion() {
   sessionStorage.clear();
   window.location.href = "index.html";
+}
+
+function abrirRegistro() {
+  bootstrap.Modal.getInstance(document.getElementById("modalLogin")).hide();
+  new bootstrap.Modal(document.getElementById("modalRegistro")).show();
+}
+
+function volverLogin() {
+  bootstrap.Modal.getInstance(document.getElementById("modalRegistro")).hide();
+  new bootstrap.Modal(document.getElementById("modalLogin")).show();
+}
+
+async function registrarse() {
+  const usuario = document.getElementById("r-usuario").value.trim();
+  const password = document.getElementById("r-password").value.trim();
+  const nombre_negocio = document.getElementById("r-negocio").value.trim();
+
+  if (!usuario || !password || !nombre_negocio) {
+    alert("Todos los campos son obligatorios");
+    return;
+  }
+
+  try {
+    const respuesta = await fetch("http://127.0.0.1:8000/auth/registro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario, password, nombre_negocio }),
+    });
+
+    if (!respuesta.ok) {
+      const error = await respuesta.json();
+      alert(error.detail ?? "Error al registrarse");
+      return;
+    }
+
+    alert("Cuenta creada exitosamente. Ahora puedes iniciar sesión.");
+    volverLogin();
+  } catch (e) {
+    alert("No se pudo conectar con el servidor");
+  }
 }
 
 // ── Ejecutar al cargar ──
