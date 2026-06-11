@@ -39,10 +39,16 @@ def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
 @router.put("/{id}")
 def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
-        conn.execute(
-            "UPDATE clientes SET nombre=?, telefono=?, credito_limite=? WHERE id=? AND usuario_id=?",
-            (cliente.nombre, cliente.telefono, cliente.credito_limite, id, usuario_id)
-        )
+        if cliente.credito_usado is not None:
+            conn.execute(
+                "UPDATE clientes SET nombre=?, telefono=?, credito_limite=?, credito_usado=? WHERE id=? AND usuario_id=?",
+                (cliente.nombre, cliente.telefono, cliente.credito_limite, cliente.credito_usado, id, usuario_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE clientes SET nombre=?, telefono=?, credito_limite=? WHERE id=? AND usuario_id=?",
+                (cliente.nombre, cliente.telefono, cliente.credito_limite, id, usuario_id)
+            )
         return {"id": id, **cliente.model_dump()}
 
 
@@ -61,3 +67,15 @@ def eliminar_cliente(id: int, usuario_id: int = Depends(verificar_token)):
             "DELETE FROM clientes WHERE id = ? AND usuario_id = ?", (id, usuario_id)
         )
         return {"mensaje": "Cliente eliminado"}
+
+
+@router.get("/{id}/compras")
+def historial_compras(id: int, usuario_id: int = Depends(verificar_token)):
+    with get_db() as conn:
+        compras = conn.execute("""
+            SELECT id, total, metodo_pago, fecha_hora
+            FROM ventas
+            WHERE cliente_id = ? AND usuario_id = ?
+            ORDER BY fecha_hora DESC
+        """, (id, usuario_id)).fetchall()
+        return [dict(c) for c in compras]

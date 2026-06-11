@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from Backend.db.database import get_db
 from Backend.models.schema import VentaCrear
 from Backend.routers.auth import verificar_token
-from datetime import datetime, date
+from datetime import date
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])
 
@@ -24,7 +24,7 @@ def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
 
             total += item.cantidad * item.precio_unitario
 
-        if venta.cliente_id:
+        if venta.cliente_id and venta.metodo_pago == "credito":
             c = conn.execute(
                 "SELECT credito_limite, credito_usado FROM clientes WHERE id = ? AND usuario_id = ?",
                 (venta.cliente_id, usuario_id)
@@ -38,8 +38,8 @@ def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
                 raise HTTPException(status_code=400, detail="Crédito insuficiente")
 
         cursor = conn.execute(
-            "INSERT INTO ventas (usuario_id, cliente_id, total) VALUES (?, ?, ?)",
-            (usuario_id, venta.cliente_id, total)
+            "INSERT INTO ventas (usuario_id, cliente_id, total, metodo_pago) VALUES (?, ?, ?, ?)",
+            (usuario_id, venta.cliente_id, total, venta.metodo_pago)
         )
         venta_id = cursor.lastrowid
 
@@ -57,7 +57,7 @@ def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
                 (item.producto_id, "salida", item.cantidad)
             )
 
-        if venta.cliente_id:
+        if venta.cliente_id and venta.metodo_pago == "credito":
             conn.execute(
                 "UPDATE clientes SET credito_usado = credito_usado + ? WHERE id = ?",
                 (total, venta.cliente_id)
@@ -78,7 +78,7 @@ def resumen_dia(usuario_id: int = Depends(verificar_token), fecha: str = Query(d
         """, (usuario_id, hoy)).fetchone()
 
         ultimas = conn.execute("""
-            SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
+            SELECT v.id, v.total, v.fecha_hora, v.metodo_pago, c.nombre as cliente_nombre
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
             WHERE v.usuario_id = ? AND DATE(v.fecha_hora) = ?
@@ -96,7 +96,7 @@ def resumen_dia(usuario_id: int = Depends(verificar_token), fecha: str = Query(d
 def listar_ventas(usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         ventas = conn.execute("""
-            SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
+            SELECT v.id, v.total, v.fecha_hora, v.metodo_pago, c.nombre as cliente_nombre
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
             WHERE v.usuario_id = ?
@@ -109,7 +109,7 @@ def listar_ventas(usuario_id: int = Depends(verificar_token)):
 def obtener_venta(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         v = conn.execute("""
-            SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
+            SELECT v.id, v.total, v.fecha_hora, v.metodo_pago, c.nombre as cliente_nombre
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
             WHERE v.id = ? AND v.usuario_id = ?

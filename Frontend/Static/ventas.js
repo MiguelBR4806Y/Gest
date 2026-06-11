@@ -60,6 +60,7 @@ async function cargarVentas() {
         <td>${v.productos ?? "—"}</td>
         <td>${v.fecha_hora?.slice(11, 16) ?? "—"}</td>
         <td>${formatearCordobas(v.total ?? 0)}</td>
+        <td><span class="badge bg-secondary">${v.metodo_pago ?? "—"}</span></td>
         <td>
           <button class="btn btn-sm btn-outline-success" onclick="verVenta(${v.id})">
             Factura
@@ -69,8 +70,7 @@ async function cargarVentas() {
     `,
       )
       .join("");
-  } 
-  catch (e) {
+  } catch (e) {
     document.getElementById("tabla-ventas").innerHTML =
       '<tr><td colspan="6" class="text-center text-danger">Error al cargar</td></tr>';
   }
@@ -178,10 +178,17 @@ async function registrarVenta() {
   }
 
   const cliente_id = document.getElementById("v-cliente").value || null;
+  const metodo_pago = document.getElementById("v-metodo-pago").value;
+
+  if (metodo_pago === "credito" && !cliente_id) {
+    alert("Para pagar con crédito debes seleccionar un cliente");
+    return;
+  }
 
   try {
     await apiPost("/ventas/", {
       cliente_id: cliente_id ? parseInt(cliente_id) : null,
+      metodo_pago: metodo_pago,
       items: itemsVenta.map((i) => ({
         producto_id: i.producto_id,
         cantidad: i.cantidad,

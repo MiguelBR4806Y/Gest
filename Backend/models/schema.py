@@ -8,6 +8,7 @@ class ProductoCrear(BaseModel):
     nombre: str
     categoria: Optional[str] = None
     stock: int = 0
+    stock_minimo: int = 5
     precio: float = 0.0
 
 class Producto(ProductoCrear):
@@ -23,10 +24,10 @@ class ClienteCrear(BaseModel):
     nombre: str
     telefono: Optional[str] = None
     credito_limite: float = 0.0
+    credito_usado: Optional[float] = None
 
 class Cliente(ClienteCrear):
     id: int
-    credito_usado: float
     creado_en: datetime
 
     class Config:
@@ -41,12 +42,14 @@ class VentaItem(BaseModel):
 
 class VentaCrear(BaseModel):
     cliente_id: Optional[int] = None
+    metodo_pago: str = "efectivo"
     items: list[VentaItem]
 
 class Venta(BaseModel):
     id: int
     cliente_id: Optional[int]
     total: float
+    metodo_pago: str
     fecha_hora: datetime
 
     class Config:
@@ -55,5 +58,5 @@ class Venta(BaseModel):
 
 # ── Movimientos ──
 class MovimientoCrear(BaseModel):
-    tipo: str  # "entrada" o "salida"
+    tipo: str
     cantidad: int

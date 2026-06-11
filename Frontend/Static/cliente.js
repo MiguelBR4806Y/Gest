@@ -61,6 +61,7 @@ async function cargarClientes() {
         </td>
         <td>${c.ultima_compra ?? "—"}</td>
         <td>
+          <button class="btn btn-sm btn-outline-info me-1" onclick="verCompras(${c.id})">Compras</button>
           <button class="btn btn-sm btn-outline-warning me-1" onclick="editarCliente(${c.id})">Editar</button>
           <button class="btn btn-sm btn-outline-danger" onclick="eliminarCliente(${c.id})">Eliminar</button>
         </td>
@@ -142,6 +143,34 @@ async function eliminarCliente(id) {
     cargarPagina();
   } catch (e) {
     alert("Error al eliminar");
+  }
+}
+
+async function verCompras(id) {
+  try {
+    const data = await apiGet("/clientes/" + id + "/compras");
+    const tbody = document.getElementById("tabla-compras");
+
+    if (data.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="3" class="text-center text-secondary">Sin compras</td></tr>';
+    } else {
+      tbody.innerHTML = data
+        .map(
+          (c) => `
+                <tr>
+                    <td>${formatearCordobas(c.total)}</td>
+                    <td><span class="badge bg-secondary">${c.metodo_pago}</span></td>
+                    <td>${c.fecha_hora?.slice(0, 16) ?? "—"}</td>
+                </tr>
+            `,
+        )
+        .join("");
+    }
+
+    new bootstrap.Modal(document.getElementById("modalCompras")).show();
+  } catch (e) {
+    alert("Error al cargar las compras");
   }
 }
 
