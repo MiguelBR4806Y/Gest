@@ -77,8 +77,20 @@ def resumen_dia(usuario_id: int = Depends(verificar_token), fecha: str = Query(d
             WHERE usuario_id = ? AND DATE(fecha_hora) = ?
         """, (usuario_id, hoy)).fetchone()
 
+        # Usamos GROUP_CONCAT para traer los nombres y cantidades ya formateados en un solo string por venta
         ultimas = conn.execute("""
-            SELECT v.id, v.total, v.fecha_hora, v.metodo_pago, c.nombre as cliente_nombre
+            SELECT 
+                v.id, 
+                v.total, 
+                v.fecha_hora, 
+                v.metodo_pago, 
+                c.nombre as cliente_nombre,
+                (
+                    SELECT GROUP_CONCAT(p.nombre || ' (x' || vi.cantidad || ')')
+                    FROM venta_items vi
+                    JOIN productos p ON vi.producto_id = p.id
+                    WHERE vi.venta_id = v.id
+                ) as productos
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
             WHERE v.usuario_id = ? AND DATE(v.fecha_hora) = ?

@@ -60,3 +60,7 @@ class Venta(BaseModel):
 class MovimientoCrear(BaseModel):
     tipo: str
     cantidad: int
+
+# ── Recarga de Inventario ──
+class RecargaInventario(BaseModel):
+    cantidad: int

@@ -9,9 +9,13 @@ router = APIRouter(prefix="/clientes", tags=["Clientes"])
 @router.get("/")
 def listar_clientes(usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
-        clientes = conn.execute(
-            "SELECT * FROM clientes WHERE usuario_id = ?", (usuario_id,)
-        ).fetchall()
+        query = """
+            SELECT c.*, 
+                   COALESCE((SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), 'Sin compras') as ultima_compra
+            FROM clientes c
+            WHERE c.usuario_id = ?
+        """
+        clientes = conn.execute(query, (usuario_id,)).fetchall()
         return [dict(c) for c in clientes]
 
 
@@ -22,15 +26,19 @@ def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_tok
             "INSERT INTO clientes (usuario_id, nombre, telefono, credito_limite) VALUES (?, ?, ?, ?)",
             (usuario_id, cliente.nombre, cliente.telefono, cliente.credito_limite)
         )
-        return {"id": cursor.lastrowid, **cliente.model_dump()}
+        return {"id": cursor.lastrowid, **cliente.model_dump(), "ultima_compra": "Sin compras"}
 
 
 @router.get("/{id}")
 def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
-        c = conn.execute(
-            "SELECT * FROM clientes WHERE id = ? AND usuario_id = ?", (id, usuario_id)
-        ).fetchone()
+        query = """
+            SELECT c.*, 
+                   COALESCE((SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), 'Sin compras') as ultima_compra
+            FROM clientes c
+            WHERE c.id = ? AND c.usuario_id = ?
+        """
+        c = conn.execute(query, (id, usuario_id)).fetchone()
         if not c:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         return dict(c)
@@ -39,6 +47,10 @@ def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
 @router.put("/{id}")
 def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
+        existe = conn.execute("SELECT id FROM clientes WHERE id = ? AND usuario_id = ?", (id, usuario_id)).fetchone()
+        if not existe:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
         if cliente.credito_usado is not None:
             conn.execute(
                 "UPDATE clientes SET nombre=?, telefono=?, credito_limite=?, credito_usado=? WHERE id=? AND usuario_id=?",
@@ -49,7 +61,16 @@ def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(ver
                 "UPDATE clientes SET nombre=?, telefono=?, credito_limite=? WHERE id=? AND usuario_id=?",
                 (cliente.nombre, cliente.telefono, cliente.credito_limite, id, usuario_id)
             )
-        return {"id": id, **cliente.model_dump()}
+            
+        # Retornamos el registro real guardado con su estado de compras dinámico
+        query = """
+            SELECT c.*, 
+                   COALESCE((SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), 'Sin compras') as ultima_compra
+            FROM clientes c
+            WHERE c.id = ?
+        """
+        c_actualizado = conn.execute(query, (id,)).fetchone()
+        return dict(c_actualizado)
 
 
 @router.delete("/{id}")
