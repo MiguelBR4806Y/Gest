@@ -82,7 +82,7 @@ async function cargarVentas() {
         <td>${i + 1}</td>
         <td>${v.cliente_nombre ?? "Cliente General"}</td>
         <td><small>${productosStr}</small></td>
-        <td>${v.fecha_hora?.slice(11, 16) ?? "—"}</td>
+        <td>${formatearHora12(v.fecha_hora)}</td>
         <td class="fw-bold text-success">${formatearCordobas(v.total ?? 0)}</td>
         <td><span class="badge bg-secondary">${v.metodo_pago ?? "—"}</span></td>
         <td>

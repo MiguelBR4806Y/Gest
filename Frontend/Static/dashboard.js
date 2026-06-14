@@ -8,43 +8,6 @@ function formatearCordobas(numero) {
   );
 }
 
-function formatearHora12(fechaHoraStr) {
-  if (!fechaHoraStr) return "—";
-
-  let horas, minutos;
-
-  // CASO 1: Si solo viene la hora armada (ej: "22:39")
-  if (fechaHoraStr.length === 5 && fechaHoraStr.includes(":")) {
-    [horas, minutos] = fechaHoraStr.split(":");
-    horas = parseInt(horas, 10);
-  }
-  // CASO 2: Si viene un formato de fecha completo (ej: "2026-06-11 22:39:00" o con "T")
-  else {
-    // Reemplazamos la 'T' por un espacio por consistencia
-    const limpio = fechaHoraStr.replace("T", " ");
-    const parteHora = limpio.split(" ")[1].slice(0, 5); // Tomamos "22:39"
-    [horas, minutos] = parteHora.split(":");
-    horas = parseInt(horas, 10);
-
-    // --- CORRECCIÓN DE DESFASE (UTC a GMT-6 Nicaragua) ---
-    // Si detectamos que la hora guardada está adelantada por UTC, le restamos las 6 horas
-    horas = horas - 6;
-    if (horas < 0) {
-      horas = horas + 24; // Corregir si pasa al día anterior
-    }
-  }
-
-  // --- FORMATEO FINAL A 12 HORAS ---
-  const ampm = horas >= 12 ? "PM" : "AM";
-  horas = horas % 12;
-  horas = horas ? horas : 12; // El 0 se convierte en 12
-
-  // Asegurar que los minutos siempre tengan 2 dígitos (por si acaso)
-  const minutosStr = String(minutos).padStart(2, "0");
-
-  return `${horas}:${minutosStr} ${ampm}`;
-}
-
 async function cargarProductos() {
   try {
     const data = await apiGet("/productos/");

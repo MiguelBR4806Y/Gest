@@ -3,6 +3,10 @@ CREATE TABLE IF NOT EXISTS usuarios (
     usuario TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     nombre_negocio TEXT DEFAULT 'Mi Negocio',
+    logo_path TEXT,
+    color_acento TEXT DEFAULT '#1D9E75',
+    plantilla_pdf_path TEXT,
+    modo_factura TEXT DEFAULT 'basica',
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

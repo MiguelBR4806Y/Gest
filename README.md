@@ -1,6 +1,8 @@
+
+```markdown
 # Bravo's Gest 🇳🇮
 
-Sistema de gestión para negocios locales (inventario, ventas, facturación, clientes, IA).
+Sistema de gestión para negocios locales (inventario, ventas, facturación, clientes, IA) adaptado al comercio de Nicaragua. Proyecto desarrollado como parte del plan de estudio de Ingeniería de Sistemas (Ciclo 5).
 
 ## Stack
 - **Backend**: Python 3.11+ · FastAPI · SQLite
@@ -14,7 +16,7 @@ Sistema de gestión para negocios locales (inventario, ventas, facturación, cli
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/MiguelBR4806Y/Gest.git
+git clone [https://github.com/MiguelBR4806Y/Gest.git](https://github.com/MiguelBR4806Y/Gest.git)
 cd Gest
 
 # 2. Crear entorno virtual
@@ -30,9 +32,11 @@ cp .env.example .env
 
 # 5. Arrancar el servidor
 uvicorn main:app --reload --port 8000
+
 ```
 
-El servidor queda en: http://127.0.0.1:8000  
+El servidor queda en: http://127.0.0.1:8000
+
 Documentación interactiva: http://127.0.0.1:8000/docs
 
 ---
@@ -40,8 +44,8 @@ Documentación interactiva: http://127.0.0.1:8000/docs
 ## Credenciales por defecto
 
 | Usuario | Contraseña |
-|---------|------------|
-| root    | 1234       |
+| --- | --- |
+| root | 1234 |
 
 ---
 
@@ -51,13 +55,14 @@ Documentación interactiva: http://127.0.0.1:8000/docs
 # Mac
 brew install ollama
 
-# O descarga desde: https://ollama.com
+# O descarga desde: [https://ollama.com](https://ollama.com)
 
 # Descargar modelo LLaMA 3.2 (2GB aprox)
 ollama pull llama3.2
 
 # Arrancar Ollama
 ollama serve
+
 ```
 
 ---
@@ -66,9 +71,11 @@ ollama serve
 
 En el archivo `.env`:
 
+```env
 NICAGEST_IA_MODO=openai
 OPENAI_API_KEY=sk-tu-clave-aqui
 
+```
 
 Sin tocar nada más del código.
 
@@ -77,7 +84,7 @@ Sin tocar nada más del código.
 ## Endpoints principales
 
 | Método | Ruta | Descripción |
-|--------|------|-------------|
+| --- | --- | --- |
 | POST | /auth/login | Iniciar sesión |
 | GET | /productos/ | Listar productos |
 | POST | /productos/ | Crear producto |
@@ -85,8 +92,8 @@ Sin tocar nada más del código.
 | DELETE | /productos/{id} | Eliminar producto |
 | POST | /productos/{id}/movimiento | Entrada/salida de inventario |
 | GET | /productos/stock-bajo | Alertas de stock |
-| POST | /ventas/ | Registrar venta completa |
-| GET | /ventas/resumen-dia | Resumen del día |
+| POST | /ventas/ | Registrar venta completa (Validación de stock) |
+| GET | /ventas/resumen-dia | Resumen del día (Métricas agrupadas) |
 | GET | /clientes/ | Listar clientes |
 | POST | /clientes/ | Crear cliente |
 | PUT | /clientes/{id} | Editar cliente |
@@ -98,6 +105,8 @@ Sin tocar nada más del código.
 ---
 
 ## Estructura del proyecto
+
+```text
 Gest/
 ├── main.py                        ← Entrada principal
 ├── requirements.txt
@@ -122,26 +131,32 @@ Gest/
     ├── static/
     │   ├── style.css
     │   ├── Script.js              ← Auth + sesión global
-    │   ├── dashboard.js
+    │   ├── dashboard.js           ← Manejo de tiempos locales (12h)
     │   ├── inventario.js
     │   ├── cliente.js
-    │   └── ventas.js
+    │   └── ventas.js              ← Control de interfaz y resumen diario
     └── Templates/
-    ├── index.html             ← Landing + login
-├── dashboard.html
-├── inventario.html
-├── clientes.html
-└── ventas.html
+        ├── index.html             ← Landing + login
+        ├── dashboard.html
+        ├── inventario.html
+        ├── clientes.html
+        └── ventas.html
+
+```
 
 ---
 
-## Progreso
+## Progreso del Proyecto
 
 | Semana | Descripción | Estado |
-|--------|-------------|--------|
-| 1 | Backend — FastAPI, SQLite, endpoints | ✅ Completa |
-| 2 | Frontend — HTML, CSS, JS, Bootstrap | ✅ Completa |
-| 3 | CRUD completo, modales, auth real | ✅ Completa |
-| 4 | Facturación, historial, UX | ⬜ Pendiente |
-| 5 | Deploy, OpenAI en producción | ⬜ Pendiente |
-| 6 | Pruebas finales, pulido | ⬜ Pendiente |
+| --- | --- | --- |
+| 1 | Backend — FastAPI, SQLite, endpoints núcleo | ✅ Completa |
+| 2 | Frontend — HTML, CSS, JS, Bootstrap modular | ✅ Completa |
+| 3 | CRUD completo, modales reactivos, auth real con JWT | ✅ Completa |
+| 4 | Facturación relacional, Historial detallado, Formato regional (`es-NI`) y UX (Horario 12h AM/PM) | ✅ Completa |
+| 5 | Integración de IA — Conexión local con Ollama (LLaMA 3.2) y reportes predictivos | ⬜ Pendiente |
+| 6 | Pruebas finales, pulido de interfaz y despliegue | ⬜ Pendiente |
+
+```
+
+```
