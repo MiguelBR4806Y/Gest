@@ -12,9 +12,11 @@ def dashboard(usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         hoy = date.today().isoformat()
 
+        # CORRECCIÓN: Filtramos usando '-6 hours' para ajustar UTC a la hora de Nicaragua
         resumen = conn.execute("""
             SELECT COUNT(*) as numero_ventas, COALESCE(SUM(total), 0) as total_ventas
-            FROM ventas WHERE usuario_id = ? AND DATE(fecha_hora) = ?
+            FROM ventas 
+            WHERE usuario_id = ? AND DATE(fecha_hora, '-6 hours') = ?
         """, (usuario_id, hoy)).fetchone()
 
         total_productos = conn.execute(
@@ -44,15 +46,14 @@ def dashboard(usuario_id: int = Depends(verificar_token)):
 async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
     with get_db() as conn:
         hoy = date.today().isoformat()
-
         ventas = conn.execute("""
-            SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre,
+            SELECT v.id, v.total, datetime(v.fecha_hora, '-6 hours') as fecha_hora, c.nombre as cliente_nombre,
                    GROUP_CONCAT(p.nombre) as productos
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
             LEFT JOIN venta_items vi ON v.id = vi.venta_id
             LEFT JOIN productos p ON vi.producto_id = p.id
-            WHERE v.usuario_id = ? AND DATE(v.fecha_hora) = ?
+            WHERE v.usuario_id = ? AND DATE(v.fecha_hora, '-6 hours') = ?
             GROUP BY v.id
             ORDER BY v.fecha_hora DESC
         """, (usuario_id, hoy)).fetchall()

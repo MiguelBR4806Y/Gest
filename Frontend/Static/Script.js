@@ -100,7 +100,7 @@ function mostrarUsuario() {
     if (btnLoginMain) btnLoginMain.style.display = "none";
 
     if (span) {
-      span.textContent = "⚙️ " + (sessionStorage.getItem("usuario") ?? "");
+      span.textContent = sessionStorage.getItem("usuario") ?? "";
       span.style.cursor = "pointer";
       span.title = "Configuración del negocio";
       span.addEventListener("click", abrirModalPerfil);
