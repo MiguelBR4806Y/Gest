@@ -1,5 +1,3 @@
-
-```markdown
 # Bravo's Gest 🇳🇮
 
 Sistema de gestión para negocios locales (inventario, ventas, facturación, clientes, IA) adaptado al comercio de Nicaragua. Proyecto desarrollado como parte del plan de estudio de Ingeniería de Sistemas (Ciclo 5).
@@ -7,8 +5,7 @@ Sistema de gestión para negocios locales (inventario, ventas, facturación, cli
 ## Stack
 - **Backend**: Python 3.11+ · FastAPI · SQLite
 - **Frontend**: HTML / CSS / JavaScript · Bootstrap 5.3
-- **IA Dev**: Ollama + LLaMA 3.2 (local, gratis)
-- **IA Prod**: OpenAI GPT-4o (con API key)
+- **IA**: Groq (Llama 3.3 70B) — análisis de ventas en tiempo real, gratis sin tarjeta. También soporta OpenAI y Ollama como alternativas configurables.
 
 ---
 
@@ -16,7 +13,7 @@ Sistema de gestión para negocios locales (inventario, ventas, facturación, cli
 
 ```bash
 # 1. Clonar el repositorio
-git clone [https://github.com/MiguelBR4806Y/Gest.git](https://github.com/MiguelBR4806Y/Gest.git)
+git clone https://github.com/MiguelBR4806Y/Gest.git
 cd Gest
 
 # 2. Crear entorno virtual
@@ -29,10 +26,6 @@ pip install -r requirements.txt
 
 # 4. Configurar variables de entorno
 cp .env.example .env
-
-# 5. Arrancar el servidor
-uvicorn main:app --reload --port 8000
-
 ```
 
 El servidor queda en: http://127.0.0.1:8000
@@ -49,35 +42,48 @@ Documentación interactiva: http://127.0.0.1:8000/docs
 
 ---
 
-## Instalar Ollama (IA local, desarrollo)
+## Configurar la IA (Groq — modo por defecto)
 
-```bash
-# Mac
-brew install ollama
+1. Crea una cuenta gratis en [console.groq.com](https://console.groq.com) (no pide tarjeta).
+2. Genera una API key en la sección **API Keys**.
+3. En tu archivo `.env`, agrega:
 
-# O descarga desde: [https://ollama.com](https://ollama.com)
-
-# Descargar modelo LLaMA 3.2 (2GB aprox)
-ollama pull llama3.2
-
-# Arrancar Ollama
-ollama serve
-
+```env
+NICAGEST_IA_MODO=groq
+GROQ_API_KEY=tu_key_aqui
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
----
+4. Arranca el servidor:
 
-## Cambiar a producción (OpenAI)
+```bash
+uvicorn main:app --reload --port 8000
+```
 
-En el archivo `.env`:
+El análisis de IA aparece en el dashboard, en la sección "✨ Análisis IA", generado a partir de las ventas del día.
 
+### Alternativas de proveedor de IA
+
+El switch en `Backend/ai/ia_service.py` permite cambiar de proveedor sin tocar código, solo editando `.env`:
+
+**OpenAI** (de pago):
 ```env
 NICAGEST_IA_MODO=openai
 OPENAI_API_KEY=sk-tu-clave-aqui
-
 ```
 
-Sin tocar nada más del código.
+**Ollama** (100% local y gratis, requiere tenerlo corriendo en tu máquina):
+```bash
+# Mac
+brew install ollama
+# O descarga desde: https://ollama.com
+
+ollama pull llama3.2
+ollama serve
+```
+```env
+NICAGEST_IA_MODO=ollama
+```
 
 ---
 
@@ -99,7 +105,7 @@ Sin tocar nada más del código.
 | PUT | /clientes/{id} | Editar cliente |
 | DELETE | /clientes/{id} | Eliminar cliente |
 | GET | /reportes/dashboard | Datos del dashboard |
-| GET | /reportes/ventas | Reporte con análisis IA |
+| GET | /reportes/ventas | Reporte con análisis IA (Groq) |
 | GET | /health | Estado del sistema |
 
 ---
@@ -115,7 +121,7 @@ Gest/
 ├── nicagest.db                    ← Se crea automáticamente
 ├── Backend/
 │   ├── ai/
-│   │   └── ia_service.py          ← Switch Ollama/OpenAI
+│   │   └── ia_service.py          ← Switch Groq / OpenAI / Ollama
 │   ├── db/
 │   │   ├── database.py            ← Conexión SQLite
 │   │   └── schema.sql             ← Esquema completo
@@ -131,7 +137,7 @@ Gest/
     ├── static/
     │   ├── style.css
     │   ├── Script.js              ← Auth + sesión global
-    │   ├── dashboard.js           ← Manejo de tiempos locales (12h)
+    │   ├── dashboard.js            ← Manejo de tiempos locales (12h)
     │   ├── inventario.js
     │   ├── cliente.js
     │   └── ventas.js              ← Control de interfaz y resumen diario
@@ -141,7 +147,6 @@ Gest/
         ├── inventario.html
         ├── clientes.html
         └── ventas.html
-
 ```
 
 ---
@@ -154,9 +159,5 @@ Gest/
 | 2 | Frontend — HTML, CSS, JS, Bootstrap modular | ✅ Completa |
 | 3 | CRUD completo, modales reactivos, auth real con JWT | ✅ Completa |
 | 4 | Facturación relacional, Historial detallado, Formato regional (`es-NI`) y UX (Horario 12h AM/PM) | ✅ Completa |
-| 5 | Integración de IA — Conexión local con Ollama (LLaMA 3.2) y reportes predictivos | ⬜ Pendiente |
+| 5 | Integración de IA — Conexión con Groq (Llama 3.3 70B) para análisis de ventas en el dashboard. Reportes predictivos aún pendientes | 🟡 En progreso |
 | 6 | Pruebas finales, pulido de interfaz y despliegue | ⬜ Pendiente |
-
-```
-
-```
