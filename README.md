@@ -5,7 +5,7 @@ Sistema de gestión para negocios locales (inventario, ventas, facturación, cli
 ## Stack
 - **Backend**: Python 3.11+ · FastAPI · SQLite
 - **Frontend**: HTML / CSS / JavaScript · Bootstrap 5.3
-- **IA**: Groq (Llama 3.3 70B) — análisis de ventas en tiempo real, gratis sin tarjeta. También soporta OpenAI y Ollama como alternativas configurables.
+- **IA**: Groq (Llama 3.3 70B) — análisis de ventas, chat inteligente y reportes predictivos, gratis sin tarjeta. También soporta OpenAI y Ollama como alternativas configurables.
 
 ---
 
@@ -60,7 +60,11 @@ GROQ_MODEL=llama-3.3-70b-versatile
 uvicorn main:app --reload --port 8000
 ```
 
-El análisis de IA aparece en el dashboard, en la sección "✨ Análisis IA", generado a partir de las ventas del día.
+### Funcionalidades de IA disponibles
+
+- **Análisis del día**: resumen automático de ventas al cargar el dashboard.
+- **Chat inteligente**: el dueño del negocio puede hacer preguntas en lenguaje natural sobre ventas, inventario, clientes y movimientos. El historial persiste 30 días en el navegador.
+- **Reportes predictivos**: tres tarjetas automáticas que muestran productos a reabastecer pronto (según ritmo de ventas), días de mayor venta histórica, y proyección de ingresos para los próximos 7 días.
 
 ### Alternativas de proveedor de IA
 
@@ -92,20 +96,29 @@ NICAGEST_IA_MODO=ollama
 | Método | Ruta | Descripción |
 | --- | --- | --- |
 | POST | /auth/login | Iniciar sesión |
+| POST | /auth/registro | Crear cuenta nueva |
+| GET | /auth/perfil | Obtener configuración del negocio |
+| PUT | /auth/perfil | Actualizar nombre y color de acento |
+| POST | /auth/perfil/logo | Subir logo del negocio |
 | GET | /productos/ | Listar productos |
 | POST | /productos/ | Crear producto |
 | PUT | /productos/{id} | Editar producto |
 | DELETE | /productos/{id} | Eliminar producto |
-| POST | /productos/{id}/movimiento | Entrada/salida de inventario |
 | GET | /productos/stock-bajo | Alertas de stock |
-| POST | /ventas/ | Registrar venta completa (Validación de stock) |
-| GET | /ventas/resumen-dia | Resumen del día (Métricas agrupadas) |
+| POST | /productos/{id}/recargar | Recargar inventario |
+| POST | /ventas/ | Registrar venta completa (validación de stock y crédito) |
+| GET | /ventas/resumen-dia | Resumen del día con métricas agrupadas |
 | GET | /clientes/ | Listar clientes |
 | POST | /clientes/ | Crear cliente |
 | PUT | /clientes/{id} | Editar cliente |
 | DELETE | /clientes/{id} | Eliminar cliente |
-| GET | /reportes/dashboard | Datos del dashboard |
-| GET | /reportes/ventas | Reporte con análisis IA (Groq) |
+| GET | /clientes/{id}/compras | Historial de compras del cliente |
+| GET | /reportes/dashboard | Métricas generales del dashboard |
+| GET | /reportes/ventas | Ventas del día con análisis IA |
+| GET | /reportes/predictivos | Reportes predictivos (reabastecimiento, días, proyección) |
+| POST | /reportes/chat | Chat con IA usando contexto completo del negocio |
+| GET | /facturas/{venta_id} | Generar PDF de factura |
+| GET | /facturas/preview | Vista previa de factura con configuración actual |
 | GET | /health | Estado del sistema |
 
 ---
@@ -128,22 +141,23 @@ Gest/
 │   ├── models/
 │   │   └── schema.py              ← Modelos Pydantic
 │   └── routers/
-│       ├── auth.py                ← Autenticación
-│       ├── productos.py           ← Inventario
+│       ├── auth.py                ← Autenticación JWT + configuración del negocio
+│       ├── productos.py           ← Inventario y movimientos
 │       ├── ventas.py              ← Punto de venta
 │       ├── clientes.py            ← Clientes y crédito
-│       └── reportes.py            ← Reportes + IA
+│       ├── reportes.py            ← Reportes, IA, chat y predictivos
+│       └── facturas.py            ← Generación de PDF con reportlab
 └── Frontend/
     ├── static/
     │   ├── style.css
-    │   ├── Script.js              ← Auth + sesión global
-    │   ├── dashboard.js            ← Manejo de tiempos locales (12h)
+    │   ├── Script.js              ← Auth, sesión global y helpers de API
+    │   ├── dashboard.js           ← Métricas, IA, chat y reportes predictivos
     │   ├── inventario.js
     │   ├── cliente.js
     │   └── ventas.js              ← Control de interfaz y resumen diario
     └── Templates/
-        ├── index.html             ← Landing + login
-        ├── dashboard.html
+        ├── index.html             ← Landing + login + registro
+        ├── dashboard.html         ← Dashboard con IA integrada
         ├── inventario.html
         ├── clientes.html
         └── ventas.html
@@ -158,6 +172,6 @@ Gest/
 | 1 | Backend — FastAPI, SQLite, endpoints núcleo | ✅ Completa |
 | 2 | Frontend — HTML, CSS, JS, Bootstrap modular | ✅ Completa |
 | 3 | CRUD completo, modales reactivos, auth real con JWT | ✅ Completa |
-| 4 | Facturación relacional, Historial detallado, Formato regional (`es-NI`) y UX (Horario 12h AM/PM) | ✅ Completa |
-| 5 | Integración de IA — Conexión con Groq (Llama 3.3 70B) para análisis de ventas en el dashboard. Reportes predictivos aún pendientes | 🟡 En progreso |
+| 4 | Facturación relacional, historial detallado, formato regional (`es-NI`), horario 12h AM/PM | ✅ Completa |
+| 5 | Integración con Groq (Llama 3.3 70B): análisis del día, chat con historial de 30 días y reportes predictivos (reabastecimiento, días de mayor venta, proyección 7 días) | ✅ Completa |
 | 6 | Pruebas finales, pulido de interfaz y despliegue | ⬜ Pendiente |
