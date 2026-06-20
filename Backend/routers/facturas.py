@@ -7,6 +7,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from Backend.db.database import get_db
 import os
+import re
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
@@ -15,15 +16,45 @@ load_dotenv()
 FACTURAS_DIR = "facturas"
 NOMBRE_NEGOCIO = os.getenv("NOMBRE_NEGOCIO", "Mi Negocio")
 
+DIAS_ES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
+
 router = APIRouter(prefix="/facturas", tags=["Facturas"])
 
 
-def formatear_fecha_hora(fecha_hora_str: str) -> str:
-    """Convierte una fecha UTC de la BD a hora de Nicaragua (GMT-6) en formato 12h."""
+def fecha_a_nicaragua(fecha_hora_str: str) -> datetime:
+    """Convierte una fecha UTC (texto) de la BD a un objeto datetime en hora de Nicaragua (GMT-6)."""
     limpio = fecha_hora_str.replace("T", " ")
     dt = datetime.strptime(limpio[:19], "%Y-%m-%d %H:%M:%S")
-    dt_nica = dt - timedelta(hours=6)
+    return dt - timedelta(hours=6)
+
+
+def formatear_fecha_hora(fecha_hora_str: str) -> str:
+    """Texto legible en formato 12h para mostrar en la factura."""
+    dt_nica = fecha_a_nicaragua(fecha_hora_str)
     return dt_nica.strftime("%d/%m/%Y %I:%M %p")
+
+
+def sanitizar_nombre_carpeta(nombre: str) -> str:
+    """Convierte el nombre del negocio en algo seguro para usar como carpeta."""
+    limpio = re.sub(r"[^\w\s-]", "", nombre or "").strip()
+    limpio = re.sub(r"\s+", "_", limpio)
+    return limpio or "Negocio"
+
+
+def carpeta_destino(nombre_negocio: str, fecha_nica: datetime) -> str:
+    """
+    Calcula la ruta de carpeta donde debe vivir la factura, siguiendo el esquema:
+    facturas/{Nombre_Negocio}/Semana_{inicio}_a_{fin}/{DiaSemana}/
+    La semana inicia en Lunes.
+    """
+    inicio_semana = fecha_nica - timedelta(days=fecha_nica.weekday())  # Lunes
+    fin_semana = inicio_semana + timedelta(days=6)  # Domingo
+
+    nombre_negocio_seguro = sanitizar_nombre_carpeta(nombre_negocio)
+    nombre_semana = f"Semana_{inicio_semana.strftime('%Y-%m-%d')}_a_{fin_semana.strftime('%Y-%m-%d')}"
+    nombre_dia = DIAS_ES[fecha_nica.weekday()]
+
+    return os.path.join(FACTURAS_DIR, nombre_negocio_seguro, nombre_semana, nombre_dia)
 
 
 def get_config_negocio(conn, usuario: str) -> dict:
@@ -47,9 +78,12 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
     nombre = nombre_negocio or NOMBRE_NEGOCIO
     color = color_acento or "#1D9E75"
 
-    os.makedirs(FACTURAS_DIR, exist_ok=True)
+    # Determinar la carpeta permanente según el negocio y la fecha real de la venta
+    fecha_nica = fecha_a_nicaragua(venta["fecha_hora"])
+    carpeta = carpeta_destino(nombre, fecha_nica)
+    os.makedirs(carpeta, exist_ok=True)
 
-    path = os.path.join(FACTURAS_DIR, f"factura_{venta_id}.pdf")
+    path = os.path.join(carpeta, f"factura_{venta_id}.pdf")
     doc = SimpleDocTemplate(path, pagesize=letter)
     styles = getSampleStyleSheet()
     elementos = []

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 import os
 
 from Backend.db import inicializar_db
-from Backend.routers import productos, clientes, ventas, reportes, auth, facturas
+from Backend.routers import productos, clientes, ventas, reportes, auth, facturas, organizacion
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +30,7 @@ app.include_router(ventas.router)
 app.include_router(reportes.router)
 app.include_router(auth.router)
 app.include_router(facturas.router)
+app.include_router(organizacion.router)
 
 # ── Archivos estáticos ──
 app.mount("/static", StaticFiles(directory="Frontend/static"), name="static")
