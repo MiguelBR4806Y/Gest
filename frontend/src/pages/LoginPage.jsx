@@ -6,7 +6,7 @@ import { Package, ChartBar as BarChart3, Users, Sparkles, Eye, EyeOff } from "lu
 export default function LoginPage() {
   const { login, registro } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState("login"); // login | register
+  const [mode, setMode] = useState("login");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,50 +44,55 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 flex">
-      {/* Left panel - features */}
-      <div className="hidden lg:flex flex-col flex-1 bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 px-12 py-16 justify-between border-r border-gray-800">
-        <div>
+    <div className="min-h-screen bg-surface flex">
+      {/* Left panel */}
+      <div className="hidden lg:flex flex-col flex-1 relative overflow-hidden px-16 py-14 justify-between">
+        {/* Decorative gradient blobs */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-brand-500/5 blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-secondary-500/5 blur-3xl" />
+
+        <div className="relative">
           <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-white">BG</div>
-            <span className="text-xl font-bold text-gray-100">Bravo's Gest</span>
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500 to-secondary-500 flex items-center justify-center font-bold text-white shadow-glow-sm">BG</div>
+            <span className="text-xl font-bold text-content">Bravo's Gest</span>
           </div>
-          <h1 className="text-4xl font-bold text-gray-100 leading-tight mb-4">
+          <h1 className="text-4xl font-bold text-content leading-tight mb-4">
             Gestiona tu negocio<br />de forma inteligente.
           </h1>
-          <p className="text-gray-400 text-lg leading-relaxed mb-12">
+          <p className="text-content-muted text-lg leading-relaxed mb-14 max-w-lg">
             Inventario, ventas, clientes y análisis con IA — todo desde un solo lugar.
           </p>
-          <div className="grid grid-cols-1 gap-5">
+          <div className="grid grid-cols-1 gap-5 max-w-md">
             {features.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
-                  <Icon size={18} className="text-brand-400" />
+              <div key={title} className="flex items-start gap-4 group">
+                <div className="w-11 h-11 rounded-2xl bg-surface-card border border-border/60 flex items-center justify-center shrink-0 transition-all duration-200 group-hover:border-brand-500/30 group-hover:shadow-glow-sm">
+                  <Icon size={18} className="text-brand-400 transition-colors duration-200" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-200">{title}</p>
-                  <p className="text-sm text-gray-500">{desc}</p>
+                  <p className="text-sm font-semibold text-content">{title}</p>
+                  <p className="text-sm text-content-muted">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <p className="text-xs text-gray-600">© 2026 Bravo's Gest. Todos los derechos reservados.</p>
+        <p className="text-xs text-content-subtle relative">© 2026 Bravo's Gest. Todos los derechos reservados.</p>
       </div>
 
-      {/* Right panel - form */}
-      <div className="flex flex-col items-center justify-center w-full lg:w-[420px] shrink-0 px-8 py-12">
-        {/* Mobile logo */}
-        <div className="flex items-center gap-3 mb-10 lg:hidden">
-          <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-white text-sm">BG</div>
-          <span className="text-lg font-bold text-gray-100">Bravo's Gest</span>
+      {/* Right panel */}
+      <div className="flex flex-col items-center justify-center w-full lg:w-[420px] shrink-0 px-8 py-12 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-500/[0.03] to-transparent pointer-events-none" />
+
+        <div className="flex items-center gap-3 mb-10 lg:hidden relative">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-brand-500 to-secondary-500 flex items-center justify-center font-bold text-white text-sm">BG</div>
+          <span className="text-lg font-bold text-content">Bravo's Gest</span>
         </div>
 
-        <div className="w-full">
-          <h2 className="text-2xl font-bold text-gray-100 mb-1">
+        <div className="w-full relative">
+          <h2 className="text-2xl font-bold text-content mb-1">
             {mode === "login" ? "Bienvenido de vuelta" : "Crear una cuenta"}
           </h2>
-          <p className="text-gray-500 text-sm mb-8">
+          <p className="text-content-muted text-sm mb-8">
             {mode === "login" ? "Ingresa tus credenciales para continuar." : "Completa los datos para registrarte."}
           </p>
 
@@ -107,26 +112,26 @@ export default function LoginPage() {
             <div>
               <label className="label">Contraseña</label>
               <div className="relative">
-                <input className="input pr-10" type={showPass ? "text" : "password"}
+                <input className="input pr-11" type={showPass ? "text" : "password"}
                   placeholder="••••••••" autoComplete={mode === "login" ? "current-password" : "new-password"}
                   value={form.password} onChange={e => set("password", e.target.value)} />
                 <button type="button" onClick={() => setShowPass(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-content-muted hover:text-content transition-colors">
+                  {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
             </div>
 
             {error && (
-              <p className="text-sm text-red-400 bg-red-900/20 border border-red-800/50 rounded-lg px-3 py-2">{error}</p>
+              <p className="text-sm text-red-400 bg-red-900/15 border border-red-800/40 rounded-xl px-4 py-2.5">{error}</p>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 text-base mt-2">
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3 text-base mt-3">
               {loading ? "Cargando..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+          <p className="text-center text-sm text-content-muted mt-7">
             {mode === "login" ? "¿No tienes cuenta? " : "¿Ya tienes cuenta? "}
             <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setForm({ usuario: "", password: "", nombre_negocio: "" }); }}
               className="text-brand-400 hover:text-brand-300 font-medium transition-colors">

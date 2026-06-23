@@ -52,8 +52,7 @@ export default function ClientesPage() {
     setSaving(true);
     try {
       await api.put(`/clientes/${editForm.id}`, {
-        nombre: editForm.nombre,
-        telefono: editForm.telefono,
+        nombre: editForm.nombre, telefono: editForm.telefono,
         credito_limite: Number(editForm.credito_limite),
         credito_usado: Number(editForm.credito_usado),
       });
@@ -86,11 +85,11 @@ export default function ClientesPage() {
   const totalDeuda       = clientes.reduce((s, c) => s + (c.credito_usado ?? 0), 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Clientes</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{totalClientes} clientes registrados</p>
+          <h1>Clientes</h1>
+          <p>{totalClientes} clientes registrados</p>
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={() => { setForm(EMPTY); setAddOpen(true); }}>
           <Plus size={16} /> Agregar cliente
@@ -99,30 +98,30 @@ export default function ClientesPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-brand-900/30 flex items-center justify-center shrink-0">
+        <div className="metric-card border border-brand-500/20 bg-gradient-to-br from-brand-500/5 to-transparent">
+          <div className="metric-icon bg-brand-500/10">
             <Users size={20} className="text-brand-400" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Total clientes</p>
-            <p className="text-xl font-bold text-gray-100">{totalClientes}</p>
+            <p className="text-xs text-content-muted">Total clientes</p>
+            <p className="text-xl font-bold text-content">{totalClientes}</p>
           </div>
         </div>
-        <div className="card p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-yellow-900/30 flex items-center justify-center shrink-0">
-            <CreditCard size={20} className="text-yellow-400" />
+        <div className="card-gradient p-5 flex items-start gap-4 border border-accent-500/20 bg-gradient-to-br from-accent-500/5 to-transparent">
+          <div className="metric-icon bg-accent-500/10">
+            <CreditCard size={20} className="text-accent-400" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Con crédito activo</p>
-            <p className="text-xl font-bold text-gray-100">{conCredito}</p>
+            <p className="text-xs text-content-muted">Con crédito activo</p>
+            <p className="text-xl font-bold text-content">{conCredito}</p>
           </div>
         </div>
-        <div className="card p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-red-900/30 flex items-center justify-center shrink-0">
+        <div className="card-gradient p-5 flex items-start gap-4 border border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent">
+          <div className="metric-icon bg-red-500/10">
             <CreditCard size={20} className="text-red-400" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Total en créditos</p>
+            <p className="text-xs text-content-muted">Total en créditos</p>
             <p className="text-xl font-bold text-red-400">{fmtMoney(totalDeuda)}</p>
           </div>
         </div>
@@ -130,26 +129,26 @@ export default function ClientesPage() {
 
       {/* Search */}
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-        <input className="input pl-9" placeholder="Buscar por nombre o teléfono..."
+        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-content-muted" />
+        <input className="input pl-10" placeholder="Buscar por nombre o teléfono..."
           value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="table-container">
         {loading ? (
           <div className="flex justify-center py-16">
-            <div className="w-7 h-7 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtrados.length === 0 ? (
-          <div className="flex flex-col items-center py-16 gap-3">
-            <Users size={36} className="text-gray-700" />
-            <p className="text-gray-500">No hay clientes registrados.</p>
+          <div className="empty-state">
+            <Users size={40} />
+            <p>No hay clientes registrados.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-gray-800">
+              <thead>
                 <tr>
                   <th className="th">#</th>
                   <th className="th">Nombre</th>
@@ -166,23 +165,23 @@ export default function ClientesPage() {
                   const badgeClass = pct >= 90 ? "badge-red" : pct >= 60 ? "badge-yellow" : "badge-green";
                   return (
                     <tr key={c.id} className="table-row">
-                      <td className="td text-gray-600">{i + 1}</td>
-                      <td className="td font-medium text-gray-200">{c.nombre}</td>
-                      <td className="td hidden sm:table-cell text-gray-500">{c.telefono || "—"}</td>
+                      <td className="td text-content-subtle">{i + 1}</td>
+                      <td className="td font-medium text-content">{c.nombre}</td>
+                      <td className="td hidden sm:table-cell text-content-muted">{c.telefono || "—"}</td>
                       <td className="td text-right">
                         {(c.credito_usado ?? 0) > 0
                           ? <span className={badgeClass}>{fmtMoney(c.credito_usado)}</span>
-                          : <span className="text-gray-600 text-xs">—</span>
+                          : <span className="text-content-subtle text-xs">—</span>
                         }
                       </td>
-                      <td className="td text-right hidden md:table-cell text-gray-500">{fmtMoney(c.credito_limite)}</td>
-                      <td className="td hidden lg:table-cell text-gray-500 text-xs">{c.ultima_compra ?? "—"}</td>
+                      <td className="td text-right hidden md:table-cell text-content-muted">{fmtMoney(c.credito_limite)}</td>
+                      <td className="td hidden lg:table-cell text-content-muted text-xs">{c.ultima_compra ?? "—"}</td>
                       <td className="td">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => abrirEditar(c)} className="btn-ghost p-1.5" title="Editar">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => abrirCompras(c)} className="btn-ghost p-1.5 text-blue-400 hover:text-blue-300" title="Historial de compras">
+                          <button onClick={() => abrirCompras(c)} className="btn-ghost p-1.5 text-secondary-400 hover:text-secondary-300" title="Historial de compras">
                             <History size={14} />
                           </button>
                           <button onClick={() => eliminar(c.id)} className="btn-ghost p-1.5 text-red-400 hover:text-red-300" title="Eliminar">
@@ -239,7 +238,7 @@ export default function ClientesPage() {
           <div>
             <label className="label">Crédito usado actual</label>
             <input className="input" type="number" min="0" step="0.01" value={editForm.credito_usado} onChange={e => setEF("credito_usado", e.target.value)} />
-            <p className="text-xs text-gray-600 mt-1">Edita para ajustar el crédito usado.</p>
+            <p className="text-xs text-content-subtle mt-1.5">Edita para ajustar el crédito usado.</p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button className="btn-secondary" onClick={() => setEditOpen(false)}>Cancelar</button>
@@ -251,7 +250,7 @@ export default function ClientesPage() {
       {/* Historial compras */}
       <Modal title="Historial de compras" open={comprasOpen} onClose={() => setComprasOpen(false)}>
         {compras.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4">Sin compras registradas.</p>
+          <p className="text-sm text-content-muted py-4">Sin compras registradas.</p>
         ) : (
           <table className="w-full">
             <thead><tr>
@@ -264,7 +263,7 @@ export default function ClientesPage() {
                 <tr key={i} className="table-row">
                   <td className="td text-right font-medium text-brand-400">{fmtMoney(c.total)}</td>
                   <td className="td"><span className="badge-blue">{c.metodo_pago}</span></td>
-                  <td className="td text-right text-gray-500 text-xs">{c.fecha_hora ?? c.fecha}</td>
+                  <td className="td text-right text-content-muted text-xs">{c.fecha_hora ?? c.fecha}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import Modal from "./Modal";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, FolderOpen,
-  LogOut, Menu, X, Settings, ChevronRight
+  LogOut, Menu, X, Settings, ChevronRight, Sun, Moon
 } from "lucide-react";
 
 const NAV = [
@@ -16,18 +16,35 @@ const NAV = [
   { to: "/organizacion", icon: FolderOpen,      label: "Organización" },
 ];
 
+function useTheme() {
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem("theme");
+    if (stored) return stored === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
+  return [dark, () => setDark(d => !d)];
+}
+
 export default function Layout({ children }) {
   const { user, logout, updateNegocio } = useAuth();
+  const [dark, toggleTheme] = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileData, setProfileData] = useState({ nombre_negocio: "", color_acento: "#16a34a" });
+  const [profileData, setProfileData] = useState({ nombre_negocio: "", color_acento: "#428dc7" });
   const [saving, setSaving] = useState(false);
 
   async function openProfile() {
     try {
       const d = await api.get("/auth/perfil");
-      setProfileData({ nombre_negocio: d.nombre_negocio ?? "", color_acento: d.color_acento ?? "#16a34a" });
+      setProfileData({ nombre_negocio: d.nombre_negocio ?? "", color_acento: d.color_acento ?? "#428dc7" });
       setProfileOpen(true);
     } catch { setProfileOpen(true); }
   }
@@ -49,41 +66,49 @@ export default function Layout({ children }) {
   }
 
   const sidebar = (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-800">
-        <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-white text-sm shrink-0">BG</div>
+    <div className="flex flex-col h-full bg-surface-card border-r border-border">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
+        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500 to-secondary-500 flex items-center justify-center font-bold text-white text-sm shadow-glow-sm shrink-0">
+          BG
+        </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-100 truncate">{user?.nombre_negocio || "Mi Negocio"}</p>
-          <p className="text-xs text-gray-500 truncate">{user?.usuario}</p>
+          <p className="text-sm font-semibold text-content truncate">{user?.nombre_negocio || "Mi Negocio"}</p>
+          <p className="text-xs text-content-muted truncate">@{user?.usuario}</p>
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-5 space-y-1">
         {NAV.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ` +
+              `flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium transition-all duration-200 group ` +
               (isActive
-                ? "bg-brand-600/20 text-brand-400 border border-brand-600/30"
-                : "text-gray-400 hover:text-gray-100 hover:bg-gray-800")
+                ? "bg-brand-500/15 text-brand-500 dark:text-brand-400 border border-brand-500/20 shadow-glow-sm"
+                : "text-content-muted hover:text-content hover:bg-surface-hover")
             }
           >
             <Icon size={18} className="shrink-0" />
             <span>{label}</span>
-            <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-50 transition-opacity" />
+            <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-40 transition-all duration-200 -translate-x-2 group-hover:translate-x-0" />
           </NavLink>
         ))}
       </nav>
 
-      <div className="px-3 py-4 border-t border-gray-800 space-y-1">
+      {/* Theme toggle + bottom */}
+      <div className="px-3 py-4 border-t border-border space-y-1">
+        <button onClick={toggleTheme}
+          className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-content-muted hover:text-content hover:bg-surface-hover w-full transition-all duration-200">
+          {dark ? <Sun size={18} /> : <Moon size={18} />}
+          {dark ? "Modo claro" : "Modo oscuro"}
+        </button>
         <button onClick={openProfile}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-gray-800 w-full transition-colors">
+          className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-content-muted hover:text-content hover:bg-surface-hover w-full transition-all duration-200">
           <Settings size={18} />
           Configuración
         </button>
         <button onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-900/20 w-full transition-colors">
+          className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-900/15 w-full transition-all duration-200">
           <LogOut size={18} />
           Cerrar sesión
         </button>
@@ -92,18 +117,14 @@ export default function Layout({ children }) {
   );
 
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 bg-gray-900 border-r border-gray-800 shrink-0">
-        {sidebar}
-      </aside>
+    <div className="flex h-screen bg-surface overflow-hidden">
+      <aside className="hidden lg:flex flex-col w-64 shrink-0">{sidebar}</aside>
 
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative w-64 bg-gray-900 border-r border-gray-800 z-50 flex flex-col">
-            <button onClick={() => setSidebarOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <aside className="relative w-72 bg-surface-card z-50 flex flex-col animate-slide-up">
+            <button onClick={() => setSidebarOpen(false)} className="absolute top-4 right-4 text-content-muted hover:text-content transition-colors">
               <X size={20} />
             </button>
             {sidebar}
@@ -111,24 +132,19 @@ export default function Layout({ children }) {
         </div>
       )}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile topbar */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800">
-          <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white">
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-surface-card border-b border-border">
+          <button onClick={() => setSidebarOpen(true)} className="text-content-muted hover:text-content transition-colors">
             <Menu size={22} />
           </button>
-          <span className="text-sm font-semibold text-gray-100">{user?.nombre_negocio || "Bravo's Gest"}</span>
+          <span className="text-sm font-semibold text-content">{user?.nombre_negocio || "Bravo's Gest"}</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto p-5 lg:p-8">{children}</main>
       </div>
 
-      {/* Profile Modal */}
       <Modal title="Configuración del negocio" open={profileOpen} onClose={() => setProfileOpen(false)}>
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
             <label className="label">Nombre del negocio</label>
             <input className="input" value={profileData.nombre_negocio}
@@ -136,9 +152,12 @@ export default function Layout({ children }) {
           </div>
           <div>
             <label className="label">Color de acento</label>
-            <input type="color" className="w-10 h-10 rounded cursor-pointer border border-gray-700 bg-transparent"
-              value={profileData.color_acento}
-              onChange={e => setProfileData(d => ({ ...d, color_acento: e.target.value }))} />
+            <div className="flex items-center gap-3">
+              <input type="color" className="w-11 h-11 rounded-xl cursor-pointer border border-border bg-transparent"
+                value={profileData.color_acento}
+                onChange={e => setProfileData(d => ({ ...d, color_acento: e.target.value }))} />
+              <span className="text-sm text-content-muted font-mono">{profileData.color_acento}</span>
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button className="btn-secondary" onClick={() => setProfileOpen(false)}>Cancelar</button>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from Backend.db.database import get_db
+from Backend.db.models import Usuario
 from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -18,18 +19,22 @@ PLANTILLAS_DIR = "plantillas"
 
 security = HTTPBearer()
 
+
 class LoginData(BaseModel):
     usuario: str
     password: str
+
 
 class RegistroData(BaseModel):
     usuario: str
     password: str
     nombre_negocio: str = "Mi Negocio"
 
+
 class PerfilData(BaseModel):
     nombre_negocio: str
     color_acento: str = "#1D9E75"
+
 
 def crear_token(usuario_id: int, usuario: str) -> str:
     expira = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
@@ -39,6 +44,7 @@ def crear_token(usuario_id: int, usuario: str) -> str:
         algorithm=ALGORITHM
     )
 
+
 def verificar_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
@@ -47,62 +53,69 @@ def verificar_token(credentials: HTTPAuthorizationCredentials = Depends(security
     except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
+
 @router.post("/registro")
 def registro(datos: RegistroData):
-    with get_db() as conn:
-        existente = conn.execute(
-            "SELECT id FROM usuarios WHERE usuario = ?",
-            (datos.usuario,)
-        ).fetchone()
+    with get_db() as session:
+        existente = session.query(Usuario).filter(
+            Usuario.usuario == datos.usuario
+        ).first()
 
         if existente:
             raise HTTPException(status_code=400, detail="El usuario ya existe")
 
-        conn.execute(
-            "INSERT INTO usuarios (usuario, password, nombre_negocio) VALUES (?, ?, ?)",
-            (datos.usuario, datos.password, datos.nombre_negocio)
+        usuario = Usuario(
+            usuario=datos.usuario,
+            password=datos.password,
+            nombre_negocio=datos.nombre_negocio
         )
+        session.add(usuario)
+        session.flush()
         return {"mensaje": "Usuario registrado exitosamente"}
+
 
 @router.post("/login")
 def login(datos: LoginData):
-    with get_db() as conn:
-        usuario = conn.execute(
-            "SELECT * FROM usuarios WHERE usuario = ? AND password = ?",
-            (datos.usuario, datos.password)
-        ).fetchone()
+    with get_db() as session:
+        usuario = session.query(Usuario).filter(
+            Usuario.usuario == datos.usuario,
+            Usuario.password == datos.password
+        ).first()
 
         if not usuario:
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
-        token = crear_token(usuario["id"], usuario["usuario"])
+        token = crear_token(usuario.id, usuario.usuario)
         return {
             "token": token,
-            "usuario": usuario["usuario"],
-            "nombre_negocio": usuario["nombre_negocio"]
+            "usuario": usuario.usuario,
+            "nombre_negocio": usuario.nombre_negocio
         }
+
 
 @router.get("/perfil")
 def obtener_perfil(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        u = conn.execute(
-            "SELECT nombre_negocio, logo_path, color_acento, modo_factura FROM usuarios WHERE id = ?",
-            (usuario_id,)
-        ).fetchone()
-
+    with get_db() as session:
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        return {
+            "nombre_negocio": u.nombre_negocio,
+            "logo_path": u.logo_path,
+            "color_acento": u.color_acento,
+            "modo_factura": u.modo_factura,
+        }
 
-        return dict(u)
 
 @router.put("/perfil")
 def actualizar_perfil(datos: PerfilData, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE usuarios SET nombre_negocio = ?, color_acento = ? WHERE id = ?",
-            (datos.nombre_negocio, datos.color_acento, usuario_id)
-        )
+    with get_db() as session:
+        session.query(Usuario).filter(Usuario.id == usuario_id).update({
+            Usuario.nombre_negocio: datos.nombre_negocio,
+            Usuario.color_acento: datos.color_acento,
+        })
         return {"mensaje": "Perfil actualizado correctamente"}
+
 
 @router.post("/perfil/logo")
 async def subir_logo(
@@ -120,13 +133,13 @@ async def subir_logo(
     with open(path, "wb") as buffer:
         shutil.copyfileobj(archivo.file, buffer)
 
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE usuarios SET logo_path = ? WHERE id = ?",
-            (path, usuario_id)
-        )
+    with get_db() as session:
+        session.query(Usuario).filter(Usuario.id == usuario_id).update({
+            Usuario.logo_path: path
+        })
 
     return {"mensaje": "Logo subido con éxito", "logo_path": path}
+
 
 @router.post("/perfil/plantilla")
 async def subir_plantilla(
@@ -142,10 +155,10 @@ async def subir_plantilla(
     with open(path, "wb") as buffer:
         shutil.copyfileobj(archivo.file, buffer)
 
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE usuarios SET plantilla_pdf_path = ?, modo_factura = 'personalizada' WHERE id = ?",
-            (path, usuario_id)
-        )
+    with get_db() as session:
+        session.query(Usuario).filter(Usuario.id == usuario_id).update({
+            Usuario.plantilla_pdf_path: path,
+            Usuario.modo_factura: "personalizada",
+        })
 
     return {"mensaje": "Plantilla subida con éxito", "modo_factura": "personalizada"}

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import text
 from Backend.db.database import get_db
+from Backend.db.models import Usuario
 from Backend.ai.ia_service import analizar_ventas, responder_pregunta
 from Backend.routers.auth import verificar_token
 from datetime import date, timedelta
@@ -17,26 +19,32 @@ class PreguntaChat(BaseModel):
 
 @router.get("/dashboard")
 def dashboard(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
+    with get_db() as session:
         hoy = date.today().isoformat()
 
-        resumen = conn.execute("""
-            SELECT COUNT(*) as numero_ventas, COALESCE(SUM(total), 0) as total_ventas
-            FROM ventas 
-            WHERE usuario_id = ? AND DATE(fecha_hora, '-6 hours') = ?
-        """, (usuario_id, hoy)).fetchone()
+        resumen = session.execute(
+            text("""
+                SELECT COUNT(*) as numero_ventas, COALESCE(SUM(total), 0) as total_ventas
+                FROM ventas
+                WHERE usuario_id = :uid AND (fecha_hora AT TIME ZONE 'America/Managua')::date = :hoy
+            """),
+            {"uid": usuario_id, "hoy": hoy}
+        ).mappings().first()
 
-        total_productos = conn.execute(
-            "SELECT COUNT(*) as total FROM productos WHERE usuario_id = ?", (usuario_id,)
-        ).fetchone()["total"]
+        total_productos = session.execute(
+            text("SELECT COUNT(*) as total FROM productos WHERE usuario_id = :uid"),
+            {"uid": usuario_id}
+        ).mappings().first()["total"]
 
-        total_clientes = conn.execute(
-            "SELECT COUNT(*) as total FROM clientes WHERE usuario_id = ?", (usuario_id,)
-        ).fetchone()["total"]
+        total_clientes = session.execute(
+            text("SELECT COUNT(*) as total FROM clientes WHERE usuario_id = :uid"),
+            {"uid": usuario_id}
+        ).mappings().first()["total"]
 
-        stock_bajo = conn.execute(
-            "SELECT COUNT(*) as total FROM productos WHERE usuario_id = ? AND stock <= 5", (usuario_id,)
-        ).fetchone()["total"]
+        stock_bajo = session.execute(
+            text("SELECT COUNT(*) as total FROM productos WHERE usuario_id = :uid AND stock <= 5"),
+            {"uid": usuario_id}
+        ).mappings().first()["total"]
 
         return {
             "resumen_dia": {
@@ -51,19 +59,24 @@ def dashboard(usuario_id: int = Depends(verificar_token)):
 
 @router.get("/ventas")
 async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
+    with get_db() as session:
         hoy = date.today().isoformat()
-        ventas = conn.execute("""
-            SELECT v.id, v.total, datetime(v.fecha_hora, '-6 hours') as fecha_hora, c.nombre as cliente_nombre,
-                   GROUP_CONCAT(p.nombre) as productos
-            FROM ventas v
-            LEFT JOIN clientes c ON v.cliente_id = c.id
-            LEFT JOIN venta_items vi ON v.id = vi.venta_id
-            LEFT JOIN productos p ON vi.producto_id = p.id
-            WHERE v.usuario_id = ? AND DATE(v.fecha_hora, '-6 hours') = ?
-            GROUP BY v.id
-            ORDER BY v.fecha_hora DESC
-        """, (usuario_id, hoy)).fetchall()
+        ventas = session.execute(
+            text("""
+                SELECT v.id, v.total,
+                       (v.fecha_hora AT TIME ZONE 'America/Managua') as fecha_hora,
+                       c.nombre as cliente_nombre,
+                       STRING_AGG(p.nombre, ', ') as productos
+                FROM ventas v
+                LEFT JOIN clientes c ON v.cliente_id = c.id
+                LEFT JOIN venta_items vi ON v.id = vi.venta_id
+                LEFT JOIN productos p ON vi.producto_id = p.id
+                WHERE v.usuario_id = :uid AND (v.fecha_hora AT TIME ZONE 'America/Managua')::date = :hoy
+                GROUP BY v.id, c.nombre
+                ORDER BY v.fecha_hora DESC
+            """),
+            {"uid": usuario_id, "hoy": hoy}
+        ).mappings().fetchall()
 
         datos = [dict(v) for v in ventas]
         analisis = await analizar_ventas(datos)
@@ -73,24 +86,28 @@ async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
 
 @router.get("/predictivos")
 def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
+    with get_db() as session:
         hoy = date.today()
 
-        # ── 1. Productos a reabastecer pronto ──
-        # Calculamos cuántas unidades se vendieron por producto en los últimos 30 días
         hace_30 = (hoy - timedelta(days=30)).isoformat()
-        ventas_items = conn.execute("""
-            SELECT vi.producto_id, SUM(vi.cantidad) as total_vendido
-            FROM venta_items vi
-            JOIN ventas v ON vi.venta_id = v.id
-            WHERE v.usuario_id = ? AND DATE(v.fecha_hora, '-6 hours') >= ?
-            GROUP BY vi.producto_id
-        """, (usuario_id, hace_30)).fetchall()
+        ventas_items = session.execute(
+            text("""
+                SELECT vi.producto_id, SUM(vi.cantidad) as total_vendido
+                FROM venta_items vi
+                JOIN ventas v ON vi.venta_id = v.id
+                WHERE v.usuario_id = :uid AND (v.fecha_hora AT TIME ZONE 'America/Managua')::date >= :hace30
+                GROUP BY vi.producto_id
+            """),
+            {"uid": usuario_id, "hace30": hace_30}
+        ).mappings().fetchall()
 
-        productos = conn.execute(
-            "SELECT id, nombre, stock, stock_minimo FROM productos WHERE usuario_id = ?",
-            (usuario_id,)
-        ).fetchall()
+        productos = session.execute(
+            text("""
+                SELECT id, nombre, stock, stock_minimo
+                FROM productos WHERE usuario_id = :uid
+            """),
+            {"uid": usuario_id}
+        ).mappings().fetchall()
 
         ritmo = {r["producto_id"]: r["total_vendido"] for r in ventas_items}
         reabastecer = []
@@ -110,18 +127,19 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
 
         reabastecer.sort(key=lambda x: x["dias_restantes"])
 
-        # ── 2. Mejor día de la semana ──
-        ventas_por_dia = conn.execute("""
-            SELECT strftime('%w', datetime(fecha_hora, '-6 hours')) as dia_semana,
-                   SUM(total) as total_ventas,
-                   COUNT(*) as num_ventas
-            FROM ventas
-            WHERE usuario_id = ?
-            GROUP BY dia_semana
-            ORDER BY total_ventas DESC
-        """, (usuario_id,)).fetchall()
+        ventas_por_dia = session.execute(
+            text("""
+                SELECT EXTRACT(DOW FROM fecha_hora AT TIME ZONE 'America/Managua')::text as dia_semana,
+                       SUM(total) as total_ventas,
+                       COUNT(*) as num_ventas
+                FROM ventas
+                WHERE usuario_id = :uid
+                GROUP BY dia_semana
+                ORDER BY total_ventas DESC
+            """),
+            {"uid": usuario_id}
+        ).mappings().fetchall()
 
-        # SQLite: %w → 0=domingo, 1=lunes ... 6=sábado
         mapa_dias = {
             "0": "Domingo", "1": "Lunes", "2": "Martes",
             "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado"
@@ -135,20 +153,21 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
                 "num_ventas": v["num_ventas"],
             })
 
-        # ── 3. Proyección de ventas próximos 7 días ──
-        # Promedio diario basado en los últimos 30 días
         hace_30_dt = hoy - timedelta(days=30)
-        ventas_30d = conn.execute("""
-            SELECT DATE(fecha_hora, '-6 hours') as fecha, SUM(total) as total
-            FROM ventas
-            WHERE usuario_id = ? AND DATE(fecha_hora, '-6 hours') >= ?
-            GROUP BY fecha
-        """, (usuario_id, hace_30_dt.isoformat())).fetchall()
+        ventas_30d = session.execute(
+            text("""
+                SELECT (fecha_hora AT TIME ZONE 'America/Managua')::date as fecha, SUM(total) as total
+                FROM ventas
+                WHERE usuario_id = :uid AND (fecha_hora AT TIME ZONE 'America/Managua')::date >= :hace30
+                GROUP BY fecha
+            """),
+            {"uid": usuario_id, "hace30": hace_30_dt.isoformat()}
+        ).mappings().fetchall()
 
         if ventas_30d:
             total_30d = sum(v["total"] for v in ventas_30d)
             dias_con_ventas = len(ventas_30d)
-            promedio_diario = total_30d / 30  # sobre 30 días corridos
+            promedio_diario = total_30d / 30
             proyeccion_7d = round(promedio_diario * 7, 2)
             mejor_dia_30d = max(ventas_30d, key=lambda x: x["total"])
         else:
@@ -158,7 +177,7 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
             mejor_dia_30d = None
 
         return {
-            "reabastecer": reabastecer[:5],  # top 5 más urgentes
+            "reabastecer": reabastecer[:5],
             "dias_semana": dias_ranking,
             "proyeccion": {
                 "promedio_diario": round(promedio_diario, 2),
@@ -170,49 +189,55 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
 
 @router.post("/chat")
 async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        u = conn.execute(
-            "SELECT nombre_negocio FROM usuarios WHERE id = ?", (usuario_id,)
-        ).fetchone()
-        nombre_negocio = u["nombre_negocio"] if u else "el negocio"
+    with get_db() as session:
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        nombre_negocio = u.nombre_negocio if u else "el negocio"
 
-        productos = conn.execute(
-            """SELECT nombre, categoria, stock, stock_minimo, precio
-               FROM productos WHERE usuario_id = ?""",
-            (usuario_id,)
-        ).fetchall()
+        productos = session.execute(
+            text("""
+                SELECT nombre, categoria, stock, stock_minimo, precio
+                FROM productos WHERE usuario_id = :uid
+            """),
+            {"uid": usuario_id}
+        ).mappings().fetchall()
 
-        clientes = conn.execute(
-            """SELECT nombre, telefono, credito_limite, credito_usado
-               FROM clientes WHERE usuario_id = ?""",
-            (usuario_id,)
-        ).fetchall()
+        clientes = session.execute(
+            text("""
+                SELECT nombre, telefono, credito_limite, credito_usado
+                FROM clientes WHERE usuario_id = :uid
+            """),
+            {"uid": usuario_id}
+        ).mappings().fetchall()
 
-        ventas = conn.execute(
-            """SELECT v.id, v.total, v.metodo_pago,
-                      datetime(v.fecha_hora, '-6 hours') as fecha_hora,
-                      c.nombre as cliente_nombre,
-                      GROUP_CONCAT(p.nombre || ' (x' || vi.cantidad || ' a C$' || vi.precio_unitario || ')') as items
-               FROM ventas v
-               LEFT JOIN clientes c ON v.cliente_id = c.id
-               LEFT JOIN venta_items vi ON v.id = vi.venta_id
-               LEFT JOIN productos p ON vi.producto_id = p.id
-               WHERE v.usuario_id = ?
-               GROUP BY v.id
-               ORDER BY v.fecha_hora DESC""",
-            (usuario_id,)
-        ).fetchall()
+        ventas = session.execute(
+            text("""
+                SELECT v.id, v.total, v.metodo_pago,
+                       (v.fecha_hora AT TIME ZONE 'America/Managua') as fecha_hora,
+                       c.nombre as cliente_nombre,
+                       STRING_AGG(p.nombre || ' (x' || vi.cantidad || ' a C$' || vi.precio_unitario || ')', ', ') as items
+                FROM ventas v
+                LEFT JOIN clientes c ON v.cliente_id = c.id
+                LEFT JOIN venta_items vi ON v.id = vi.venta_id
+                LEFT JOIN productos p ON vi.producto_id = p.id
+                WHERE v.usuario_id = :uid
+                GROUP BY v.id, c.nombre
+                ORDER BY v.fecha_hora DESC
+            """),
+            {"uid": usuario_id}
+        ).mappings().fetchall()
 
-        movimientos = conn.execute(
-            """SELECT p.nombre as producto, m.tipo, m.cantidad,
-                      datetime(m.fecha_hora, '-6 hours') as fecha_hora
-               FROM movimientos m
-               JOIN productos p ON m.producto_id = p.id
-               WHERE p.usuario_id = ?
-               ORDER BY m.fecha_hora DESC
-               LIMIT 100""",
-            (usuario_id,)
-        ).fetchall()
+        movimientos = session.execute(
+            text("""
+                SELECT p.nombre as producto, m.tipo, m.cantidad,
+                       (m.fecha_hora AT TIME ZONE 'America/Managua') as fecha_hora
+                FROM movimientos m
+                JOIN productos p ON m.producto_id = p.id
+                WHERE p.usuario_id = :uid
+                ORDER BY m.fecha_hora DESC
+                LIMIT 100
+            """),
+            {"uid": usuario_id}
+        ).mappings().fetchall()
 
         contexto = {
             "nombre_negocio": nombre_negocio,

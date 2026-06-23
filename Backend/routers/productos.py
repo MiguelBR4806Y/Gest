@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from Backend.db.database import get_db
+from Backend.db.models import Producto, Movimiento
 from Backend.models.schema import ProductoCrear, RecargaInventario
 from Backend.routers.auth import verificar_token
 
@@ -8,79 +9,113 @@ router = APIRouter(prefix="/productos", tags=["Productos"])
 
 @router.get("/")
 def listar_productos(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        productos = conn.execute(
-            "SELECT * FROM productos WHERE usuario_id = ?", (usuario_id,)
-        ).fetchall()
-        return [dict(p) for p in productos]
+    with get_db() as session:
+        productos = session.query(Producto).filter(
+            Producto.usuario_id == usuario_id
+        ).all()
+        return [{
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "stock": p.stock,
+            "stock_minimo": p.stock_minimo,
+            "precio": p.precio,
+            "creado_en": str(p.creado_en),
+        } for p in productos]
 
 
 @router.post("/")
 def crear_producto(producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO productos (usuario_id, nombre, categoria, stock, stock_minimo, precio) 
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (usuario_id, producto.nombre, producto.categoria, producto.stock, producto.stock_minimo, producto.precio)
+    with get_db() as session:
+        p = Producto(
+            usuario_id=usuario_id,
+            nombre=producto.nombre,
+            categoria=producto.categoria,
+            stock=producto.stock,
+            stock_minimo=producto.stock_minimo,
+            precio=producto.precio,
         )
-        return {"id": cursor.lastrowid, **producto.model_dump()}
+        session.add(p)
+        session.flush()
+        return {"id": p.id, **producto.model_dump()}
 
 
 @router.get("/stock-bajo")
 def stock_bajo(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        productos = conn.execute(
-            "SELECT * FROM productos WHERE usuario_id = ? AND stock <= stock_minimo", (usuario_id,)
-        ).fetchall()
-        return [dict(p) for p in productos]
+    with get_db() as session:
+        productos = session.query(Producto).filter(
+            Producto.usuario_id == usuario_id,
+            Producto.stock <= Producto.stock_minimo
+        ).all()
+        return [{
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "stock": p.stock,
+            "stock_minimo": p.stock_minimo,
+            "precio": p.precio,
+            "creado_en": str(p.creado_en),
+        } for p in productos]
 
 
 @router.get("/{id}")
 def obtener_producto(id: int, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        p = conn.execute(
-            "SELECT * FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id)
-        ).fetchone()
+    with get_db() as session:
+        p = session.query(Producto).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
+        ).first()
         if not p:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
-        return dict(p)
+        return {
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "stock": p.stock,
+            "stock_minimo": p.stock_minimo,
+            "precio": p.precio,
+            "creado_en": str(p.creado_en),
+        }
 
 
 @router.put("/{id}")
 def editar_producto(id: int, producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        conn.execute(
-            """
-            UPDATE productos 
-            SET nombre=?, categoria=?, stock=?, stock_minimo=?, precio=? 
-            WHERE id=? AND usuario_id=?
-            """,
-            (producto.nombre, producto.categoria, producto.stock, producto.stock_minimo, producto.precio, id, usuario_id)
-        )
+    with get_db() as session:
+        session.query(Producto).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
+        ).update({
+            Producto.nombre: producto.nombre,
+            Producto.categoria: producto.categoria,
+            Producto.stock: producto.stock,
+            Producto.stock_minimo: producto.stock_minimo,
+            Producto.precio: producto.precio,
+        })
         return {"id": id, **producto.model_dump()}
 
 
 @router.delete("/{id}")
 def eliminar_producto(id: int, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        conn.execute("DELETE FROM venta_items WHERE producto_id = ?", (id,))
-        conn.execute("DELETE FROM movimientos WHERE producto_id = ?", (id,))
-        conn.execute("DELETE FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id))
+    with get_db() as session:
+        session.query(Movimiento).filter(Movimiento.producto_id == id).delete()
+        session.query(Producto).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
+        ).delete()
         return {"mensaje": "Producto eliminado"}
 
 
 @router.get("/{id}/movimientos")
 def listar_movimientos(id: int, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        movimientos = conn.execute("""
-            SELECT tipo, cantidad, fecha_hora
-            FROM movimientos
-            WHERE producto_id = ?
-            ORDER BY fecha_hora DESC
-        """, (id,)).fetchall()
-        return [dict(m) for m in movimientos]
+    with get_db() as session:
+        movimientos = session.query(Movimiento).filter(
+            Movimiento.producto_id == id
+        ).order_by(Movimiento.fecha_hora.desc()).all()
+        return [{
+            "tipo": m.tipo,
+            "cantidad": m.cantidad,
+            "fecha_hora": str(m.fecha_hora),
+        } for m in movimientos]
 
 
 @router.post("/{id}/recargar")
@@ -88,21 +123,22 @@ def recargar_inventario(id: int, recarga: RecargaInventario, usuario_id: int = D
     if recarga.cantidad <= 0:
         raise HTTPException(status_code=400, detail="La cantidad a recargar debe ser mayor a cero")
 
-    with get_db() as conn:
-        p = conn.execute(
-            "SELECT stock FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id)
-        ).fetchone()
-        
+    with get_db() as session:
+        p = session.query(Producto).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
+        ).first()
+
         if not p:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-        nuevo_stock = p["stock"] + recarga.cantidad
+        nuevo_stock = p.stock + recarga.cantidad
+        p.stock = nuevo_stock
 
-        conn.execute("UPDATE productos SET stock = ? WHERE id = ?", (nuevo_stock, id))
-        conn.execute(
-            "INSERT INTO movimientos (producto_id, tipo, cantidad) VALUES (?, 'entrada', ?)",
-            (id, recarga.cantidad)
-        )
+        m = Movimiento(producto_id=id, tipo="entrada", cantidad=recarga.cantidad)
+        session.add(m)
+        session.flush()
+
         return {"mensaje": "Inventario recargado con éxito", "stock_actual": nuevo_stock}
 
 
@@ -114,21 +150,23 @@ def registrar_movimiento(id: int, movimiento: dict, usuario_id: int = Depends(ve
     if tipo not in ("entrada", "salida"):
         raise HTTPException(status_code=400, detail="Tipo inválido")
 
-    with get_db() as conn:
-        p = conn.execute(
-            "SELECT stock FROM productos WHERE id = ? AND usuario_id = ?", (id, usuario_id)
-        ).fetchone()
+    with get_db() as session:
+        p = session.query(Producto).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
+        ).first()
+
         if not p:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-        nuevo_stock = p["stock"] + cantidad if tipo == "entrada" else p["stock"] - cantidad
+        nuevo_stock = p.stock + cantidad if tipo == "entrada" else p.stock - cantidad
 
         if nuevo_stock < 0:
             raise HTTPException(status_code=400, detail="Stock insuficiente")
 
-        conn.execute("UPDATE productos SET stock = ? WHERE id = ?", (nuevo_stock, id))
-        conn.execute(
-            "INSERT INTO movimientos (producto_id, tipo, cantidad) VALUES (?, ?, ?)",
-            (id, tipo, cantidad)
-        )
+        p.stock = nuevo_stock
+        m = Movimiento(producto_id=id, tipo=tipo, cantidad=cantidad)
+        session.add(m)
+        session.flush()
+
         return {"stock_actual": nuevo_stock}

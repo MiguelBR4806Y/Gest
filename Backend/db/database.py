@@ -1,50 +1,38 @@
-import sqlite3
 import os
 from contextlib import contextmanager
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from Backend.db.models import Base, Usuario
 
-# Ruta de la base de datos
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "../../nicagest.db")
-SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
+load_dotenv()
 
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/nicagest"
+)
 
-def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 @contextmanager
 def get_db():
-    conn = get_connection()
+    session = SessionLocal()
     try:
-        yield conn
-        conn.commit()
+        yield session
+        session.commit()
     except Exception:
-        conn.rollback()
+        session.rollback()
         raise
     finally:
-        conn.close()
-
-
-def _migrar_columnas_usuarios(conn):
-    columnas_actuales = [fila["name"] for fila in conn.execute("PRAGMA table_info(usuarios)")]
-
-    columnas_nuevas = {
-        "logo_path": "TEXT",
-        "color_acento": "TEXT DEFAULT '#1D9E75'",
-        "plantilla_pdf_path": "TEXT",
-        "modo_factura": "TEXT DEFAULT 'basica'",
-    }
-
-    for nombre, tipo in columnas_nuevas.items():
-        if nombre not in columnas_actuales:
-            conn.execute(f"ALTER TABLE usuarios ADD COLUMN {nombre} {tipo}")
+        session.close()
 
 
 def inicializar_db():
-    with get_db() as conn:
-        with open(SCHEMA_PATH, "r") as f:
-            conn.executescript(f.read())
-        _migrar_columnas_usuarios(conn)
+    Base.metadata.create_all(bind=engine)
+    with get_db() as session:
+        root = session.query(Usuario).filter(Usuario.usuario == "root").first()
+        if not root:
+            root = Usuario(usuario="root", password="1234", nombre_negocio="Bravo's Gest")
+            session.add(root)

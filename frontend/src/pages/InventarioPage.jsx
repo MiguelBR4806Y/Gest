@@ -102,11 +102,11 @@ export default function InventarioPage() {
   const stockBajo = productos.filter(p => p.stock <= p.stock_minimo).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Inventario</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{productos.length} productos registrados · {stockBajo > 0 && <span className="text-red-400">{stockBajo} con stock bajo</span>}</p>
+          <h1>Inventario</h1>
+          <p>{productos.length} productos registrados · {stockBajo > 0 && <span className="text-red-400">{stockBajo} con stock bajo</span>}</p>
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={() => { setForm(EMPTY_FORM); setAddOpen(true); }}>
           <Plus size={16} /> Agregar producto
@@ -114,25 +114,25 @@ export default function InventarioPage() {
       </div>
 
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-        <input className="input pl-9" placeholder="Buscar por nombre o categoría..."
+        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-content-muted" />
+        <input className="input pl-10" placeholder="Buscar por nombre o categoría..."
           value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="table-container">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="w-7 h-7 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtrados.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Package size={36} className="text-gray-700" />
-            <p className="text-gray-500">No hay productos registrados.</p>
+          <div className="empty-state">
+            <Package size={40} />
+            <p>No hay productos registrados.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-gray-800">
+              <thead>
                 <tr>
                   <th className="th">#</th>
                   <th className="th">Nombre</th>
@@ -148,23 +148,23 @@ export default function InventarioPage() {
                   const bajo = p.stock <= p.stock_minimo;
                   return (
                     <tr key={p.id} className="table-row">
-                      <td className="td text-gray-600">{i + 1}</td>
-                      <td className="td font-medium text-gray-200">{p.nombre}</td>
-                      <td className="td hidden sm:table-cell text-gray-500">{p.categoria || "—"}</td>
+                      <td className="td text-content-subtle">{i + 1}</td>
+                      <td className="td font-medium text-content">{p.nombre}</td>
+                      <td className="td hidden sm:table-cell text-content-muted">{p.categoria || "—"}</td>
                       <td className="td text-center">
                         <span className={bajo ? "badge-red" : "badge-green"}>{p.stock}</span>
                       </td>
-                      <td className="td text-center hidden md:table-cell text-gray-500">{p.stock_minimo}</td>
-                      <td className="td text-right hidden sm:table-cell text-gray-300">{fmtMoney(p.precio)}</td>
+                      <td className="td text-center hidden md:table-cell text-content-muted">{p.stock_minimo}</td>
+                      <td className="td text-right hidden sm:table-cell text-content">{fmtMoney(p.precio)}</td>
                       <td className="td">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => abrirEditar(p)} className="btn-ghost p-1.5" title="Editar">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => abrirRecargar(p)} className="btn-ghost p-1.5 text-blue-400 hover:text-blue-300" title="Recargar">
+                          <button onClick={() => abrirRecargar(p)} className="btn-ghost p-1.5 text-secondary-400 hover:text-secondary-300" title="Recargar">
                             <PackagePlus size={14} />
                           </button>
-                          <button onClick={() => abrirHistorial(p)} className="btn-ghost p-1.5 text-gray-400" title="Historial">
+                          <button onClick={() => abrirHistorial(p)} className="btn-ghost p-1.5 text-content-muted" title="Historial">
                             <History size={14} />
                           </button>
                           <button onClick={() => eliminar(p.id)} className="btn-ghost p-1.5 text-red-400 hover:text-red-300" title="Eliminar">
@@ -264,7 +264,7 @@ export default function InventarioPage() {
       {/* Historial */}
       <Modal title="Historial de movimientos" open={historialOpen} onClose={() => setHistorialOpen(false)}>
         {historial.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4">Sin movimientos registrados.</p>
+          <p className="text-sm text-content-muted py-4">Sin movimientos registrados.</p>
         ) : (
           <table className="w-full">
             <thead><tr>
@@ -279,7 +279,7 @@ export default function InventarioPage() {
                     <span className={h.tipo === "entrada" ? "badge-green" : "badge-red"}>{h.tipo}</span>
                   </td>
                   <td className="td text-center">{h.cantidad}</td>
-                  <td className="td text-right text-gray-500 text-xs">{h.fecha_hora ?? h.fecha}</td>
+                  <td className="td text-right text-content-muted text-xs">{h.fecha_hora ?? h.fecha}</td>
                 </tr>
               ))}
             </tbody>

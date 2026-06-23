@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import func
 from Backend.db.database import get_db
+from Backend.db.models import Cliente, Venta
 from Backend.models.schema import ClienteCrear
 from Backend.routers.auth import verificar_token
 
@@ -8,95 +10,130 @@ router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
 @router.get("/")
 def listar_clientes(usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        query = """
-            SELECT c.*, 
-                   COALESCE((SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), 'Sin compras') as ultima_compra
-            FROM clientes c
-            WHERE c.usuario_id = ?
-        """
-        clientes = conn.execute(query, (usuario_id,)).fetchall()
-        return [dict(c) for c in clientes]
+    with get_db() as session:
+        clientes = session.query(Cliente).filter(
+            Cliente.usuario_id == usuario_id
+        ).all()
+
+        result = []
+        for c in clientes:
+            ultima = session.query(func.max(Venta.fecha_hora)).filter(
+                Venta.cliente_id == c.id
+            ).scalar()
+            result.append({
+                "id": c.id,
+                "nombre": c.nombre,
+                "telefono": c.telefono,
+                "credito_limite": c.credito_limite,
+                "credito_usado": c.credito_usado,
+                "creado_en": str(c.creado_en),
+                "ultima_compra": str(ultima) if ultima else "Sin compras",
+            })
+        return result
 
 
 @router.post("/")
 def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        cursor = conn.execute(
-            "INSERT INTO clientes (usuario_id, nombre, telefono, credito_limite) VALUES (?, ?, ?, ?)",
-            (usuario_id, cliente.nombre, cliente.telefono, cliente.credito_limite)
+    with get_db() as session:
+        c = Cliente(
+            usuario_id=usuario_id,
+            nombre=cliente.nombre,
+            telefono=cliente.telefono,
+            credito_limite=cliente.credito_limite,
         )
-        return {"id": cursor.lastrowid, **cliente.model_dump(), "ultima_compra": "Sin compras"}
+        session.add(c)
+        session.flush()
+        return {"id": c.id, **cliente.model_dump(), "ultima_compra": "Sin compras"}
 
 
 @router.get("/{id}")
 def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        query = """
-            SELECT c.*, 
-                   COALESCE((SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), 'Sin compras') as ultima_compra
-            FROM clientes c
-            WHERE c.id = ? AND c.usuario_id = ?
-        """
-        c = conn.execute(query, (id, usuario_id)).fetchone()
+    with get_db() as session:
+        c = session.query(Cliente).filter(
+            Cliente.id == id,
+            Cliente.usuario_id == usuario_id
+        ).first()
         if not c:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
-        return dict(c)
+
+        ultima = session.query(func.max(Venta.fecha_hora)).filter(
+            Venta.cliente_id == c.id
+        ).scalar()
+
+        return {
+            "id": c.id,
+            "nombre": c.nombre,
+            "telefono": c.telefono,
+            "credito_limite": c.credito_limite,
+            "credito_usado": c.credito_usado,
+            "creado_en": str(c.creado_en),
+            "ultima_compra": str(ultima) if ultima else "Sin compras",
+        }
 
 
 @router.put("/{id}")
 def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        existe = conn.execute("SELECT id FROM clientes WHERE id = ? AND usuario_id = ?", (id, usuario_id)).fetchone()
+    with get_db() as session:
+        existe = session.query(Cliente).filter(
+            Cliente.id == id,
+            Cliente.usuario_id == usuario_id
+        ).first()
         if not existe:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
+        updates = {
+            Cliente.nombre: cliente.nombre,
+            Cliente.telefono: cliente.telefono,
+            Cliente.credito_limite: cliente.credito_limite,
+        }
         if cliente.credito_usado is not None:
-            conn.execute(
-                "UPDATE clientes SET nombre=?, telefono=?, credito_limite=?, credito_usado=? WHERE id=? AND usuario_id=?",
-                (cliente.nombre, cliente.telefono, cliente.credito_limite, cliente.credito_usado, id, usuario_id)
-            )
-        else:
-            conn.execute(
-                "UPDATE clientes SET nombre=?, telefono=?, credito_limite=? WHERE id=? AND usuario_id=?",
-                (cliente.nombre, cliente.telefono, cliente.credito_limite, id, usuario_id)
-            )
-            
-        # Retornamos el registro real guardado con su estado de compras dinámico
-        query = """
-            SELECT c.*, 
-                   COALESCE((SELECT MAX(v.fecha_hora) FROM ventas v WHERE v.cliente_id = c.id), 'Sin compras') as ultima_compra
-            FROM clientes c
-            WHERE c.id = ?
-        """
-        c_actualizado = conn.execute(query, (id,)).fetchone()
-        return dict(c_actualizado)
+            updates[Cliente.credito_usado] = cliente.credito_usado
+
+        session.query(Cliente).filter(Cliente.id == id).update(updates)
+
+        c = session.query(Cliente).filter(Cliente.id == id).first()
+        ultima = session.query(func.max(Venta.fecha_hora)).filter(
+            Venta.cliente_id == id
+        ).scalar()
+
+        return {
+            "id": c.id,
+            "nombre": c.nombre,
+            "telefono": c.telefono,
+            "credito_limite": c.credito_limite,
+            "credito_usado": c.credito_usado,
+            "creado_en": str(c.creado_en),
+            "ultima_compra": str(ultima) if ultima else "Sin compras",
+        }
 
 
 @router.delete("/{id}")
 def eliminar_cliente(id: int, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        conn.execute("""
-            DELETE FROM venta_items WHERE venta_id IN (
-                SELECT id FROM ventas WHERE cliente_id = ? AND usuario_id = ?
-            )
-        """, (id, usuario_id))
-        conn.execute(
-            "DELETE FROM ventas WHERE cliente_id = ? AND usuario_id = ?", (id, usuario_id)
-        )
-        conn.execute(
-            "DELETE FROM clientes WHERE id = ? AND usuario_id = ?", (id, usuario_id)
-        )
+    with get_db() as session:
+        session.query(Venta).filter(
+            Venta.cliente_id == id,
+            Venta.usuario_id == usuario_id
+        ).delete(synchronize_session=False)
+        session.query(Cliente).filter(
+            Cliente.id == id,
+            Cliente.usuario_id == usuario_id
+        ).delete()
         return {"mensaje": "Cliente eliminado"}
 
 
 @router.get("/{id}/compras")
 def historial_compras(id: int, usuario_id: int = Depends(verificar_token)):
-    with get_db() as conn:
-        compras = conn.execute("""
-            SELECT id, total, metodo_pago, fecha_hora
-            FROM ventas
-            WHERE cliente_id = ? AND usuario_id = ?
-            ORDER BY fecha_hora DESC
-        """, (id, usuario_id)).fetchall()
-        return [dict(c) for c in compras]
+    with get_db() as session:
+        compras = session.query(
+            Venta.id, Venta.total, Venta.metodo_pago, Venta.fecha_hora
+        ).filter(
+            Venta.cliente_id == id,
+            Venta.usuario_id == usuario_id
+        ).order_by(Venta.fecha_hora.desc()).all()
+
+        return [{
+            "id": c.id,
+            "total": c.total,
+            "metodo_pago": c.metodo_pago,
+            "fecha_hora": str(c.fecha_hora),
+        } for c in compras]

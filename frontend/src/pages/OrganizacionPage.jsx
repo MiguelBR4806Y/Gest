@@ -11,19 +11,21 @@ function PeriodCard({ label, ventas, ingresos, onClick, disabled }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`card p-5 text-center flex flex-col items-center gap-2 transition-all duration-150 w-full
-        ${disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-800 hover:border-gray-700 cursor-pointer hover:scale-[1.02]"}`}
+      className={`card p-5 text-center flex flex-col items-center gap-2.5 transition-all duration-200 w-full
+        ${disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-surface-hover40 hover:border-border/60 cursor-pointer active:scale-[0.97]"}`}
     >
-      <FolderOpen size={28} className={disabled ? "text-gray-700" : "text-brand-400"} />
-      <p className="text-sm font-semibold text-gray-200">{label}</p>
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${disabled ? "bg-surface-hover" : "bg-brand-500/10"}`}>
+        <FolderOpen size={28} className={disabled ? "text-content-subtle" : "text-brand-400"} />
+      </div>
+      <p className="text-sm font-semibold text-content">{label}</p>
       {!disabled ? (
         <>
           <p className="text-2xl font-bold text-brand-400">{ventas}</p>
-          <p className="text-xs text-gray-500">{ventas === 1 ? "factura" : "facturas"}</p>
-          {ingresos > 0 && <p className="text-xs text-blue-400 font-medium">{fmtMoney(ingresos)}</p>}
+          <p className="text-xs text-content-muted">{ventas === 1 ? "factura" : "facturas"}</p>
+          {ingresos > 0 && <p className="text-xs text-secondary-400 font-medium">{fmtMoney(ingresos)}</p>}
         </>
       ) : (
-        <p className="text-xs text-gray-600">Sin facturas</p>
+        <p className="text-xs text-content-subtle">Sin facturas</p>
       )}
     </button>
   );
@@ -130,7 +132,6 @@ export default function OrganizacionPage() {
     return `${api.baseUrl}/organizacion/descargar?${p.toString()}`;
   }
 
-  // Breadcrumb items
   const crumbs = [{ label: "Inicio", nivel: "anios" }];
   if (state.anio)      crumbs.push({ label: String(state.anio),                          nivel: "semestres" });
   if (state.semestre)  crumbs.push({ label: "H" + state.semestre,                        nivel: "trimestres" });
@@ -148,11 +149,11 @@ export default function OrganizacionPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Organización de Facturas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Navega y descarga facturas por período</p>
+          <h1>Organización de Facturas</h1>
+          <p>Navega y descarga facturas por período</p>
         </div>
         {!vistaFacturas && state.nivel !== "anios" && (
           <a href={urlDescargar("anio")} target="_blank" rel="noreferrer"
@@ -163,14 +164,15 @@ export default function OrganizacionPage() {
       </div>
 
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 flex-wrap text-sm">
+      <nav className="flex items-center gap-1.5 flex-wrap text-sm">
         {crumbs.map((c, i) => (
-          <span key={i} className="flex items-center gap-1">
-            {i > 0 && <ChevronRight size={14} className="text-gray-600" />}
+          <span key={i} className="flex items-center gap-1.5">
+            {i > 0 && <ChevronRight size={14} className="text-content-subtle/60" />}
             {i === crumbs.length - 1 ? (
-              <span className="text-gray-200 font-medium">{c.label}</span>
+              <span className="text-content font-medium bg-surface-card px-3 py-1.5 rounded-xl border border-border/40">{c.label}</span>
             ) : (
-              <button onClick={() => navegarA(c.nivel)} className="text-brand-400 hover:text-brand-300 transition-colors">
+              <button onClick={() => navegarA(c.nivel)}
+                className="text-brand-400 hover:text-brand-300 transition-colors px-2 py-1 hover:bg-brand-500/5 rounded-lg">
                 {c.label}
               </button>
             )}
@@ -178,11 +180,11 @@ export default function OrganizacionPage() {
         ))}
       </nav>
 
-      {/* Vista de facturas del día */}
+      {/* Vista de facturas */}
       {vistaFacturas ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-200">{tituloFacturas}</h2>
+            <h2 className="text-lg font-semibold text-content">{tituloFacturas}</h2>
             <div className="flex gap-2">
               <a href={urlDescargar("dia", { fecha: state.dia })} target="_blank" rel="noreferrer"
                 className="btn-secondary flex items-center gap-2 text-sm">
@@ -195,10 +197,10 @@ export default function OrganizacionPage() {
             </div>
           </div>
 
-          <div className="card overflow-hidden">
+          <div className="table-container">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="border-b border-gray-800">
+                <thead>
                   <tr>
                     <th className="th">#</th>
                     <th className="th">Cliente</th>
@@ -210,13 +212,13 @@ export default function OrganizacionPage() {
                 </thead>
                 <tbody>
                   {facturas.length === 0 ? (
-                    <tr><td colSpan={6} className="td text-center text-gray-600 py-8">Sin facturas para este día</td></tr>
+                    <tr><td colSpan={6} className="td text-center text-content-subtle py-8">Sin facturas para este día</td></tr>
                   ) : facturas.map((f, i) => (
                     <tr key={f.id} className="table-row">
-                      <td className="td text-gray-600">{f.id}</td>
-                      <td className="td font-medium text-gray-200">{f.cliente_nombre ?? "—"}</td>
+                      <td className="td text-content-subtle">{f.id}</td>
+                      <td className="td font-medium text-content">{f.cliente_nombre ?? "—"}</td>
                       <td className="td text-right font-semibold text-brand-400">{fmtMoney(f.total)}</td>
-                      <td className="td hidden sm:table-cell text-gray-500">{formatHora(f.fecha_hora)}</td>
+                      <td className="td hidden sm:table-cell text-content-muted">{formatHora(f.fecha_hora)}</td>
                       <td className="td hidden sm:table-cell"><span className="badge-blue">{f.metodo_pago}</span></td>
                       <td className="td">
                         <div className="flex items-center justify-end gap-1">
@@ -227,7 +229,7 @@ export default function OrganizacionPage() {
                           </a>
                           <a href={`${api.baseUrl}/organizacion/descargar?nivel=factura&factura_id=${f.id}&usuario=${user?.usuario ?? "root"}`}
                             target="_blank" rel="noreferrer"
-                            className="btn-ghost p-1.5 text-blue-400 hover:text-blue-300" title="Descargar">
+                            className="btn-ghost p-1.5 text-secondary-400 hover:text-secondary-300" title="Descargar">
                             <Download size={14} />
                           </a>
                         </div>
@@ -241,12 +243,12 @@ export default function OrganizacionPage() {
         </div>
       ) : loading ? (
         <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-9 h-9 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center py-20 gap-3">
-          <FileText size={40} className="text-gray-700" />
-          <p className="text-gray-500">No hay facturas en este período.</p>
+        <div className="empty-state">
+          <FileText size={44} />
+          <p>No hay facturas en este período.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">

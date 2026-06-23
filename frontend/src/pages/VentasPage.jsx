@@ -103,11 +103,11 @@ export default function VentasPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Ventas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Registro y control de transacciones</p>
+          <h1>Ventas</h1>
+          <p>Registro y control de transacciones</p>
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={abrirNueva}>
           <Plus size={16} /> Nueva venta
@@ -116,56 +116,56 @@ export default function VentasPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-5 flex items-start gap-4 border border-brand-800/40">
-          <div className="w-10 h-10 rounded-xl bg-brand-900/30 flex items-center justify-center shrink-0">
+        <div className="metric-card border border-brand-500/20 bg-gradient-to-br from-brand-500/5 to-transparent">
+          <div className="metric-icon bg-brand-500/10">
             <TrendingUp size={20} className="text-brand-400" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Total del día</p>
+            <p className="text-xs text-content-muted">Total del día</p>
             <p className="text-xl font-bold text-brand-400">{fmtMoney(resumen.total)}</p>
           </div>
         </div>
-        <div className="card p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center shrink-0">
-            <Receipt size={20} className="text-gray-400" />
+        <div className="card-gradient p-5 flex items-start gap-4">
+          <div className="metric-icon bg-secondary-500/10">
+            <Receipt size={20} className="text-secondary-400" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Transacciones</p>
-            <p className="text-xl font-bold text-gray-100">{resumen.transacciones}</p>
+            <p className="text-xs text-content-muted">Transacciones</p>
+            <p className="text-xl font-bold text-content">{resumen.transacciones}</p>
           </div>
         </div>
-        <div className="card p-5 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-blue-900/30 flex items-center justify-center shrink-0">
-            <ShoppingCart size={20} className="text-blue-400" />
+        <div className="card-gradient p-5 flex items-start gap-4">
+          <div className="metric-icon bg-accent-500/10">
+            <ShoppingCart size={20} className="text-accent-400" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Promedio</p>
-            <p className="text-xl font-bold text-blue-400">{fmtMoney(resumen.promedio)}</p>
+            <p className="text-xs text-content-muted">Promedio</p>
+            <p className="text-xl font-bold text-accent-400">{fmtMoney(resumen.promedio)}</p>
           </div>
         </div>
       </div>
 
       {/* Date filter */}
       <div className="flex items-center gap-3">
-        <label className="text-sm text-gray-400 font-medium">Fecha:</label>
+        <label className="text-sm text-content-muted font-medium">Fecha:</label>
         <input type="date" className="input w-auto" value={fecha} onChange={e => setFecha(e.target.value)} />
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="table-container">
         {loading ? (
           <div className="flex justify-center py-16">
-            <div className="w-7 h-7 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : ventas.length === 0 ? (
-          <div className="flex flex-col items-center py-16 gap-3">
-            <ShoppingCart size={36} className="text-gray-700" />
-            <p className="text-gray-500">No hay ventas para esta fecha.</p>
+          <div className="empty-state">
+            <ShoppingCart size={40} />
+            <p>No hay ventas para esta fecha.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-gray-800">
+              <thead>
                 <tr>
                   <th className="th">#</th>
                   <th className="th">Cliente</th>
@@ -179,17 +179,17 @@ export default function VentasPage() {
               <tbody>
                 {ventas.map((v, i) => (
                   <tr key={v.id} className="table-row">
-                    <td className="td text-gray-600">{i + 1}</td>
-                    <td className="td font-medium text-gray-200">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
-                    <td className="td hidden md:table-cell text-gray-500 text-xs">{v.productos ?? "—"}</td>
-                    <td className="td hidden sm:table-cell text-gray-500">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
+                    <td className="td text-content-subtle">{i + 1}</td>
+                    <td className="td font-medium text-content">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
+                    <td className="td hidden md:table-cell text-content-muted text-xs">{v.productos ?? "—"}</td>
+                    <td className="td hidden sm:table-cell text-content-muted">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
                     <td className="td text-right font-semibold text-brand-400">{fmtMoney(v.total)}</td>
                     <td className="td hidden sm:table-cell">
                       <span className={metodoBadge(v.metodo_pago)}>{v.metodo_pago}</span>
                     </td>
                     <td className="td">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => abrirDetalle(v)} className="btn-ghost p-1.5 text-xs text-gray-400">
+                        <button onClick={() => abrirDetalle(v)} className="btn-ghost p-1.5 text-content-muted">
                           <Search size={14} />
                         </button>
                         <button onClick={() => anularVenta(v.id)} className="btn-ghost p-1.5 text-red-400 hover:text-red-300">
@@ -242,9 +242,9 @@ export default function VentasPage() {
           </div>
 
           {items.length > 0 && (
-            <div className="bg-gray-950 rounded-xl overflow-hidden">
+            <div className="bg-surface rounded-2xl overflow-hidden border border-border/40">
               <table className="w-full text-sm">
-                <thead><tr className="border-b border-gray-800">
+                <thead><tr className="border-b border-border/40">
                   <th className="th">Producto</th>
                   <th className="th text-center">Cant.</th>
                   <th className="th text-right">Precio</th>
@@ -256,7 +256,7 @@ export default function VentasPage() {
                     <tr key={i} className="table-row">
                       <td className="td">{it.nombre}</td>
                       <td className="td text-center">{it.cantidad}</td>
-                      <td className="td text-right text-gray-400">{fmtMoney(it.precio)}</td>
+                      <td className="td text-right text-content-muted">{fmtMoney(it.precio)}</td>
                       <td className="td text-right font-medium text-brand-400">{fmtMoney(it.precio * it.cantidad)}</td>
                       <td className="td">
                         <button onClick={() => quitarItem(i)} className="btn-ghost p-1 text-red-400 hover:text-red-300">
@@ -267,8 +267,8 @@ export default function VentasPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-gray-700">
-                    <td colSpan={3} className="td text-right font-bold text-gray-200">Total:</td>
+                  <tr className="border-t border-border/50">
+                    <td colSpan={3} className="td text-right font-bold text-content">Total:</td>
                     <td className="td text-right font-bold text-brand-400 text-base">{fmtMoney(totalVenta)}</td>
                     <td />
                   </tr>
@@ -291,14 +291,14 @@ export default function VentasPage() {
         {ventaDetalle && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Cliente:</span> <span className="text-gray-200 ml-1">{ventaDetalle.cliente ?? "—"}</span></div>
-              <div><span className="text-gray-500">Método:</span> <span className={`ml-1 ${metodoBadge(ventaDetalle.metodo_pago)}`}>{ventaDetalle.metodo_pago}</span></div>
-              <div><span className="text-gray-500">Hora:</span> <span className="text-gray-200 ml-1">{formatHora(ventaDetalle.hora ?? ventaDetalle.fecha)}</span></div>
-              <div><span className="text-gray-500">Total:</span> <span className="text-brand-400 font-bold ml-1">{fmtMoney(ventaDetalle.total)}</span></div>
+              <div><span className="text-content-muted">Cliente:</span> <span className="text-content ml-1">{ventaDetalle.cliente ?? "—"}</span></div>
+              <div><span className="text-content-muted">Método:</span> <span className={`ml-1 ${metodoBadge(ventaDetalle.metodo_pago)}`}>{ventaDetalle.metodo_pago}</span></div>
+              <div><span className="text-content-muted">Hora:</span> <span className="text-content ml-1">{formatHora(ventaDetalle.hora ?? ventaDetalle.fecha)}</span></div>
+              <div><span className="text-content-muted">Total:</span> <span className="text-brand-400 font-bold ml-1">{fmtMoney(ventaDetalle.total)}</span></div>
             </div>
             {ventaDetalle.items && (
               <table className="w-full text-sm">
-                <thead><tr className="border-b border-gray-800">
+                <thead><tr className="border-b border-border/50">
                   <th className="th">Producto</th>
                   <th className="th text-center">Cant.</th>
                   <th className="th text-right">Subtotal</th>

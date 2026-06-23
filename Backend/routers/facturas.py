@@ -6,6 +6,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from Backend.db.database import get_db
+from Backend.db.models import Usuario
+from sqlalchemy import text
 import os
 import re
 from datetime import datetime, timedelta
@@ -22,33 +24,25 @@ router = APIRouter(prefix="/facturas", tags=["Facturas"])
 
 
 def fecha_a_nicaragua(fecha_hora_str: str) -> datetime:
-    """Convierte una fecha UTC (texto) de la BD a un objeto datetime en hora de Nicaragua (GMT-6)."""
     limpio = fecha_hora_str.replace("T", " ")
     dt = datetime.strptime(limpio[:19], "%Y-%m-%d %H:%M:%S")
     return dt - timedelta(hours=6)
 
 
 def formatear_fecha_hora(fecha_hora_str: str) -> str:
-    """Texto legible en formato 12h para mostrar en la factura."""
     dt_nica = fecha_a_nicaragua(fecha_hora_str)
     return dt_nica.strftime("%d/%m/%Y %I:%M %p")
 
 
 def sanitizar_nombre_carpeta(nombre: str) -> str:
-    """Convierte el nombre del negocio en algo seguro para usar como carpeta."""
     limpio = re.sub(r"[^\w\s-]", "", nombre or "").strip()
     limpio = re.sub(r"\s+", "_", limpio)
     return limpio or "Negocio"
 
 
 def carpeta_destino(nombre_negocio: str, fecha_nica: datetime) -> str:
-    """
-    Calcula la ruta de carpeta donde debe vivir la factura, siguiendo el esquema:
-    facturas/{Nombre_Negocio}/Semana_{inicio}_a_{fin}/{DiaSemana}/
-    La semana inicia en Lunes.
-    """
-    inicio_semana = fecha_nica - timedelta(days=fecha_nica.weekday())  # Lunes
-    fin_semana = inicio_semana + timedelta(days=6)  # Domingo
+    inicio_semana = fecha_nica - timedelta(days=fecha_nica.weekday())
+    fin_semana = inicio_semana + timedelta(days=6)
 
     nombre_negocio_seguro = sanitizar_nombre_carpeta(nombre_negocio)
     nombre_semana = f"Semana_{inicio_semana.strftime('%Y-%m-%d')}_a_{fin_semana.strftime('%Y-%m-%d')}"
@@ -57,18 +51,14 @@ def carpeta_destino(nombre_negocio: str, fecha_nica: datetime) -> str:
     return os.path.join(FACTURAS_DIR, nombre_negocio_seguro, nombre_semana, nombre_dia)
 
 
-def get_config_negocio(conn, usuario: str) -> dict:
-    """Obtiene nombre, color y logo configurados por el usuario."""
-    u = conn.execute(
-        "SELECT nombre_negocio, color_acento, logo_path FROM usuarios WHERE usuario = ?",
-        (usuario,)
-    ).fetchone()
+def get_config_negocio(session, usuario: str) -> dict:
+    u = session.query(Usuario).filter(Usuario.usuario == usuario).first()
 
     if u:
         return {
-            "nombre_negocio": u["nombre_negocio"] or NOMBRE_NEGOCIO,
-            "color_acento": u["color_acento"] or "#1D9E75",
-            "logo_path": u["logo_path"],
+            "nombre_negocio": u.nombre_negocio or NOMBRE_NEGOCIO,
+            "color_acento": u.color_acento or "#1D9E75",
+            "logo_path": u.logo_path,
         }
 
     return {"nombre_negocio": NOMBRE_NEGOCIO, "color_acento": "#1D9E75", "logo_path": None}
@@ -78,7 +68,6 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
     nombre = nombre_negocio or NOMBRE_NEGOCIO
     color = color_acento or "#1D9E75"
 
-    # Determinar la carpeta permanente según el negocio y la fecha real de la venta
     fecha_nica = fecha_a_nicaragua(venta["fecha_hora"])
     carpeta = carpeta_destino(nombre, fecha_nica)
     os.makedirs(carpeta, exist_ok=True)
@@ -88,15 +77,13 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
     styles = getSampleStyleSheet()
     elementos = []
 
-    # Logo (si existe y el archivo está en disco)
     if logo_path and os.path.exists(logo_path):
         try:
             elementos.append(Image(logo_path, width=1.5 * inch, height=1.5 * inch, kind='proportional'))
             elementos.append(Spacer(1, 0.1 * inch))
         except Exception:
-            pass  # Si el archivo está dañado, simplemente no se muestra
+            pass
 
-    # Encabezado
     elementos.append(Paragraph(f"<b>{nombre}</b>", styles["Title"]))
     elementos.append(Spacer(1, 0.2 * inch))
     elementos.append(Paragraph(f"<b>Factura #</b>{venta_id}", styles["Normal"]))
@@ -104,7 +91,6 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
     elementos.append(Paragraph(f"<b>Cliente:</b> {venta['cliente_nombre'] or 'Consumidor final'}", styles["Normal"]))
     elementos.append(Spacer(1, 0.3 * inch))
 
-    # Tabla de productos
     data = [["Producto", "Cantidad", "Precio unit.", "Subtotal"]]
     for item in items:
         subtotal = item["cantidad"] * item["precio_unitario"]
@@ -142,8 +128,8 @@ def previsualizar_factura(
     color_acento: str = Query(default="#1D9E75"),
     usuario: str = Query(default="root"),
 ):
-    with get_db() as conn:
-        config = get_config_negocio(conn, usuario)
+    with get_db() as session:
+        config = get_config_negocio(session, usuario)
 
     venta_dict = {
         "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -160,25 +146,31 @@ def previsualizar_factura(
 
 @router.get("/{venta_id}")
 def obtener_factura(venta_id: int, usuario: str = Query(default="root")):
-    with get_db() as conn:
-        config = get_config_negocio(conn, usuario)
+    with get_db() as session:
+        config = get_config_negocio(session, usuario)
 
-        venta = conn.execute("""
-            SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
-            FROM ventas v
-            LEFT JOIN clientes c ON v.cliente_id = c.id
-            WHERE v.id = ?
-        """, (venta_id,)).fetchone()
+        venta = session.execute(
+            text("""
+                SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
+                FROM ventas v
+                LEFT JOIN clientes c ON v.cliente_id = c.id
+                WHERE v.id = :vid
+            """),
+            {"vid": venta_id}
+        ).mappings().first()
 
         if not venta:
             raise HTTPException(status_code=404, detail="Venta no encontrada")
 
-        items = conn.execute("""
-            SELECT p.nombre, vi.cantidad, vi.precio_unitario
-            FROM venta_items vi
-            JOIN productos p ON vi.producto_id = p.id
-            WHERE vi.venta_id = ?
-        """, (venta_id,)).fetchall()
+        items = session.execute(
+            text("""
+                SELECT p.nombre, vi.cantidad, vi.precio_unitario
+                FROM venta_items vi
+                JOIN productos p ON vi.producto_id = p.id
+                WHERE vi.venta_id = :vid
+            """),
+            {"vid": venta_id}
+        ).mappings().fetchall()
 
         venta_dict = dict(venta)
         items_list = [dict(i) for i in items]

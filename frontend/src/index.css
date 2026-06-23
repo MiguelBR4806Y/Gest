@@ -4,55 +4,221 @@
 
 @layer base {
   * { box-sizing: border-box; }
+
+  :root {
+    --brand-50: 252 247 243;
+    --brand-100: 245 237 229;
+    --brand-200: 240 226 214;
+    --brand-300: 234 216 202;
+    --brand-400: 232 214 202;
+    --brand-500: 232 214 202;
+    --brand-600: 212 191 176;
+    --brand-700: 191 165 150;
+    --brand-800: 168 139 124;
+    --brand-900: 140 113 99;
+
+    --secondary-50: 245 239 233;
+    --secondary-100: 237 224 212;
+    --secondary-200: 221 205 190;
+    --secondary-300: 206 186 167;
+    --secondary-400: 201 179 158;
+    --secondary-500: 196 172 149;
+    --secondary-600: 174 150 127;
+    --secondary-700: 151 128 106;
+    --secondary-800: 127 106 86;
+    --secondary-900: 102 84 66;
+
+    --accent-50: 240 247 247;
+    --accent-100: 218 237 239;
+    --accent-200: 197 226 229;
+    --accent-300: 181 215 218;
+    --accent-400: 173 209 212;
+    --accent-500: 165 204 207;
+    --accent-600: 142 181 184;
+    --accent-700: 120 157 160;
+    --accent-800: 98 133 136;
+    --accent-900: 76 108 110;
+
+    --surface: 245 240 236;
+    --surface-card: 255 255 255;
+    --surface-elevated: 237 228 220;
+    --surface-hover: 0 0 0 / 0.04;
+
+    --on-surface: 44 36 32;
+    --on-muted: 122 110 102;
+    --on-subtle: 163 152 142;
+
+    --border-default: 212 201 191;
+
+    --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.08), 0 0 6px -2px rgba(0, 0, 0, 0.02);
+    --shadow-glow: 0 0 20px rgba(232, 214, 202, 0.15);
+    --shadow-glow-sm: 0 0 12px rgba(232, 214, 202, 0.1);
+  }
+
+  .dark {
+    --brand-50: 237 244 250;
+    --brand-100: 212 230 243;
+    --brand-200: 169 204 231;
+    --brand-300: 125 179 219;
+    --brand-400: 95 159 210;
+    --brand-500: 66 141 199;
+    --brand-600: 53 113 168;
+    --brand-700: 40 88 137;
+    --brand-800: 27 63 106;
+    --brand-900: 14 38 75;
+
+    --secondary-50: 234 245 245;
+    --secondary-100: 206 233 232;
+    --secondary-200: 157 210 209;
+    --secondary-300: 108 188 186;
+    --secondary-400: 77 165 163;
+    --secondary-500: 45 133 131;
+    --secondary-600: 36 110 108;
+    --secondary-700: 27 87 85;
+    --secondary-800: 18 64 62;
+    --secondary-900: 9 41 39;
+
+    --accent-50: 249 244 232;
+    --accent-100: 242 231 200;
+    --accent-200: 229 207 146;
+    --accent-300: 216 184 92;
+    --accent-400: 209 173 78;
+    --accent-500: 204 162 65;
+    --accent-600: 173 136 54;
+    --accent-700: 142 110 43;
+    --accent-800: 111 84 32;
+    --accent-900: 80 58 21;
+
+    --surface: 13 17 23;
+    --surface-card: 22 27 34;
+    --surface-elevated: 22 27 34;
+    --surface-hover: 255 255 255 / 0.04;
+
+    --on-surface: 243 244 246;
+    --on-muted: 156 163 175;
+    --on-subtle: 107 114 128;
+
+    --border-default: 31 41 55;
+
+    --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.3), 0 0 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-glow: 0 0 20px rgba(66, 141, 199, 0.15);
+    --shadow-glow-sm: 0 0 12px rgba(66, 141, 199, 0.1);
+  }
+
   body {
-    @apply bg-gray-950 text-gray-100 font-sans antialiased;
+    @apply bg-surface text-content font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-brand-500/30 text-content;
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { @apply bg-gray-900; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
+  ::-webkit-scrollbar-track { @apply bg-surface; }
+  ::-webkit-scrollbar-thumb { @apply bg-content-subtle/30 rounded-full hover:bg-content-muted/40; }
 }
 
 @layer components {
   .card {
-    @apply bg-gray-900 border border-gray-800 rounded-xl;
+    @apply bg-surface-card border border-border rounded-2xl shadow-soft;
   }
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-content-subtle/30 hover:shadow-glow-sm;
+  }
+  .card-gradient {
+    @apply card relative overflow-hidden;
+  }
+  .card-gradient::before {
+    content: '';
+    @apply absolute inset-0 opacity-[0.03] pointer-events-none;
+    background: radial-gradient(ellipse at top left, rgb(var(--brand-500)), transparent 70%),
+                radial-gradient(ellipse at bottom right, rgb(var(--secondary-500)), transparent 70%);
+  }
+
   .btn-primary {
-    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-5 py-2.5 rounded-xl
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-glow-sm hover:shadow-glow active:scale-[0.97];
   }
   .btn-secondary {
-    @apply bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+    @apply bg-surface-hover hover:bg-content-subtle/15 text-content font-medium px-5 py-2.5 rounded-xl
+           transition-all duration-200 border border-border hover:border-content-subtle/30 active:scale-[0.97];
   }
   .btn-danger {
-    @apply bg-red-900/60 hover:bg-red-800 text-red-300 font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+    @apply bg-red-900/20 hover:bg-red-800/30 text-red-400 font-medium px-5 py-2.5 rounded-xl
+           transition-all duration-200 border border-red-800/20 hover:border-red-700/30 active:scale-[0.97];
   }
   .btn-ghost {
-    @apply hover:bg-gray-800 text-gray-400 hover:text-gray-100 px-3 py-2 rounded-lg transition-colors duration-150;
+    @apply hover:bg-surface-hover text-content-muted hover:text-content px-3 py-2 rounded-xl
+           transition-all duration-200;
   }
+
   .input {
-    @apply bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent placeholder-gray-500 transition;
+    @apply bg-surface border border-border text-content rounded-xl px-4 py-2.5 w-full
+           focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60
+           placeholder:text-content-subtle transition-all duration-200;
   }
   .label {
-    @apply block text-sm font-medium text-gray-400 mb-1;
+    @apply block text-sm font-medium text-content-muted mb-1.5 tracking-wide;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
   .badge-green {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-900/60 text-brand-400;
+    @apply badge bg-secondary-900/40 text-secondary-600 dark:text-secondary-400 border border-secondary-700/30;
   }
   .badge-red {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-900/60 text-red-400;
+    @apply badge bg-red-900/20 text-red-600 dark:text-red-400 border border-red-800/20;
   }
   .badge-yellow {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900/60 text-yellow-400;
+    @apply badge bg-accent-900/20 text-accent-700 dark:text-accent-400 border border-accent-800/20;
   }
   .badge-blue {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900/60 text-blue-400;
+    @apply badge bg-brand-900/20 text-brand-700 dark:text-brand-400 border border-brand-800/20;
   }
-  .table-row {
-    @apply border-b border-gray-800 hover:bg-gray-800/50 transition-colors;
+
+  .table-container {
+    @apply card overflow-hidden;
+  }
+  .table-container table {
+    @apply w-full;
+  }
+  .table-container thead {
+    @apply border-b border-border;
   }
   .th {
-    @apply text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 text-left;
+    @apply text-xs font-semibold text-content-subtle uppercase tracking-wider px-5 py-3.5 text-left;
   }
   .td {
-    @apply px-4 py-3 text-sm text-gray-300;
+    @apply px-5 py-3.5 text-sm text-content;
+  }
+  .table-row {
+    @apply border-b border-border/50 transition-all duration-150 hover:bg-surface-hover;
+  }
+  .table-row:last-child {
+    @apply border-b-0;
+  }
+
+  .metric-card {
+    @apply card-gradient p-5 flex items-start gap-4;
+  }
+  .metric-icon {
+    @apply w-11 h-11 rounded-2xl flex items-center justify-center shrink-0;
+  }
+
+  .page-header {
+    @apply flex flex-col sm:flex-row sm:items-center justify-between gap-3;
+  }
+  .page-header h1 {
+    @apply text-2xl font-bold text-content;
+  }
+  .page-header p {
+    @apply text-sm text-content-muted mt-0.5;
+  }
+
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 gap-4 text-content-subtle;
+  }
+  .empty-state svg {
+    @apply opacity-40;
   }
 }
