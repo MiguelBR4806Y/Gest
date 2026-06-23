@@ -26,9 +26,9 @@ export default function VentasPage() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/ventas/?fecha=${fecha}`);
-      setVentas(data.ventas ?? data);
-      const lista = data.ventas ?? data;
+      const data = await api.get(`/ventas/resumen-dia?fecha=${fecha}`);
+      const lista = data.ultimas_ventas ?? [];
+      setVentas(lista);
       const total = lista.reduce((s, v) => s + (v.total ?? 0), 0);
       setResumen({ total, transacciones: lista.length, promedio: lista.length ? total / lista.length : 0 });
     } catch(e) { console.error(e); }
@@ -75,7 +75,7 @@ export default function VentasPage() {
       await api.post("/ventas/", {
         cliente_id: vForm.cliente_id ? Number(vForm.cliente_id) : null,
         metodo_pago: vForm.metodo_pago,
-        items: items.map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
+        items: items.map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio })),
       });
       setNuevaOpen(false);
       cargar();
@@ -180,9 +180,9 @@ export default function VentasPage() {
                 {ventas.map((v, i) => (
                   <tr key={v.id} className="table-row">
                     <td className="td text-gray-600">{i + 1}</td>
-                    <td className="td font-medium text-gray-200">{v.cliente ?? "—"}</td>
+                    <td className="td font-medium text-gray-200">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
                     <td className="td hidden md:table-cell text-gray-500 text-xs">{v.productos ?? "—"}</td>
-                    <td className="td hidden sm:table-cell text-gray-500">{formatHora(v.hora ?? v.fecha)}</td>
+                    <td className="td hidden sm:table-cell text-gray-500">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
                     <td className="td text-right font-semibold text-brand-400">{fmtMoney(v.total)}</td>
                     <td className="td hidden sm:table-cell">
                       <span className={metodoBadge(v.metodo_pago)}>{v.metodo_pago}</span>

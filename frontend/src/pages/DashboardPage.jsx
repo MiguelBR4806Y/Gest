@@ -43,15 +43,28 @@ export default function DashboardPage() {
   async function cargar() {
     setLoading(true);
     try {
-      const [dash, pred] = await Promise.all([
+      const [dash, pred, ventasHoy, stockBajoList] = await Promise.all([
         api.get("/reportes/dashboard"),
         api.get("/reportes/predictivos").catch(() => null),
+        api.get("/ventas/resumen-dia").catch(() => null),
+        api.get("/productos/stock-bajo").catch(() => []),
       ]);
-      setMetrics(dash.metricas);
-      setUltimasVentas(dash.ultimas_ventas ?? []);
-      setStockBajo(dash.stock_bajo ?? []);
-      setIaAnalisis(dash.analisis_ia ?? "");
-      setPredictivos(pred);
+      setMetrics({
+        total_productos: dash.total_productos,
+        ventas_hoy: dash.resumen_dia?.total_ventas ?? 0,
+        total_clientes: dash.total_clientes,
+        alertas_stock: dash.stock_bajo,
+      });
+      setUltimasVentas(ventasHoy?.ultimas_ventas ?? []);
+      setStockBajo(Array.isArray(stockBajoList) ? stockBajoList : []);
+      setIaAnalisis("");
+      if (pred) {
+        setPredictivos({
+          reabastecer: pred.reabastecer ?? [],
+          mejores_dias: (pred.dias_semana ?? []).map(d => ({ dia: d.dia, total: d.total_ventas })),
+          proyeccion: pred.proyeccion?.proyeccion_7_dias ?? null,
+        });
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -66,8 +79,8 @@ export default function DashboardPage() {
     setChat(c => [...c, { role: "user", text: q }]);
     setChatLoading(true);
     try {
-      const data = await api.post("/reportes/ia/chat", { pregunta: q });
-      setChat(c => [...c, { role: "ai", text: data.respuesta ?? data.response ?? "Sin respuesta" }]);
+      const data = await api.post("/reportes/chat", { pregunta: q });
+      setChat(c => [...c, { role: "ai", text: data.respuesta ?? "Sin respuesta" }]);
     } catch (e) {
       setChat(c => [...c, { role: "ai", text: "Error al consultar la IA: " + e.message }]);
     } finally {
@@ -227,8 +240,8 @@ export default function DashboardPage() {
                 <tbody>
                   {ultimasVentas.map((v, i) => (
                     <tr key={i} className="table-row">
-                      <td className="td">{v.cliente ?? "—"}</td>
-                      <td className="td text-gray-500">{formatHora(v.hora ?? v.fecha)}</td>
+                      <td className="td">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
+                      <td className="td text-gray-500">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
                       <td className="td text-right font-medium text-brand-400">{fmtMoney(v.total)}</td>
                     </tr>
                   ))}

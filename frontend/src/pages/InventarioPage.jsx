@@ -81,7 +81,7 @@ export default function InventarioPage() {
     setHistorialOpen(true);
     setHistorial([]);
     try {
-      const data = await api.get(`/productos/${p.id}/historial`);
+      const data = await api.get(`/productos/${p.id}/movimientos`);
       setHistorial(data);
     } catch(e) { console.error(e); }
   }
@@ -279,7 +279,7 @@ export default function InventarioPage() {
                     <span className={h.tipo === "entrada" ? "badge-green" : "badge-red"}>{h.tipo}</span>
                   </td>
                   <td className="td text-center">{h.cantidad}</td>
-                  <td className="td text-right text-gray-500 text-xs">{h.fecha}</td>
+                  <td className="td text-right text-gray-500 text-xs">{h.fecha_hora ?? h.fecha}</td>
                 </tr>
               ))}
             </tbody>
