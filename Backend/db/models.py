@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, CheckConstraint, Boolean
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
@@ -18,11 +18,14 @@ class Usuario(Base):
     color_acento = Column(String, default="#1D9E75")
     plantilla_pdf_path = Column(Text, nullable=True)
     modo_factura = Column(String, default="basica")
+    tasa_cambio = Column(Float, default=36.0)
+    tasa_cambio_configurada = Column(Boolean, default=False)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
     productos = relationship("Producto", back_populates="usuario")
     clientes = relationship("Cliente", back_populates="usuario")
     ventas = relationship("Venta", back_populates="usuario")
+    promociones = relationship("Promocion", back_populates="usuario")
 
 
 class Producto(Base):
@@ -35,10 +38,28 @@ class Producto(Base):
     stock = Column(Integer, default=0)
     stock_minimo = Column(Integer, default=5)
     precio = Column(Float, default=0.0)
+    precio_dolar = Column(Float, default=0.0)
+    promocion_id = Column(Integer, ForeignKey("promociones.id"), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
     usuario = relationship("Usuario", back_populates="productos")
     movimientos = relationship("Movimiento", back_populates="producto")
+    promocion = relationship("Promocion", back_populates="productos")
+
+
+class Promocion(Base):
+    __tablename__ = "promociones"
+
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    nombre = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)
+    valor = Column(Float, default=0.0)
+    activa = Column(Boolean, default=True)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario", back_populates="promociones")
+    productos = relationship("Producto", back_populates="promocion")
 
 
 class Cliente(Base):

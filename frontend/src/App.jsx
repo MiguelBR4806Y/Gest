@@ -7,6 +7,7 @@ import InventarioPage from "./pages/InventarioPage";
 import VentasPage from "./pages/VentasPage";
 import ClientesPage from "./pages/ClientesPage";
 import OrganizacionPage from "./pages/OrganizacionPage";
+import PromocionesPage from "./pages/PromocionesPage";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -35,6 +36,7 @@ function AppRoutes() {
       <Route path="/ventas"       element={<PrivateRoute><VentasPage /></PrivateRoute>} />
       <Route path="/clientes"     element={<PrivateRoute><ClientesPage /></PrivateRoute>} />
       <Route path="/organizacion" element={<PrivateRoute><OrganizacionPage /></PrivateRoute>} />
+      <Route path="/promociones"  element={<PrivateRoute><PromocionesPage /></PrivateRoute>} />
       <Route path="*"             element={<Navigate to="/" replace />} />
     </Routes>
   );

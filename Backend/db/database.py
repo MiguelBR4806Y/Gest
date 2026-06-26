@@ -32,6 +32,17 @@ def get_db():
 def inicializar_db():
     Base.metadata.create_all(bind=engine)
     with get_db() as session:
+        for alter in [
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS precio_dolar FLOAT DEFAULT 0.0",
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS promocion_id INTEGER REFERENCES promociones(id)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tasa_cambio FLOAT DEFAULT 36.0",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tasa_cambio_configurada BOOLEAN DEFAULT FALSE",
+        ]:
+            try:
+                session.execute(text(alter))
+            except:
+                pass
+
         root = session.query(Usuario).filter(Usuario.usuario == "root").first()
         if not root:
             root = Usuario(usuario="root", password="1234", nombre_negocio="Bravo's Gest")

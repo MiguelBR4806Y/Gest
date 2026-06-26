@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [form, setForm] = useState({ usuario: "", password: "", nombre_negocio: "" });
+  const [form, setForm] = useState({ usuario: "", password: "", nombre_negocio: "", tasa_cambio: 36 });
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); setError(""); }
 
@@ -25,7 +25,7 @@ export default function LoginPage() {
         navigate("/dashboard");
       } else {
         if (!form.nombre_negocio.trim()) { setError("El nombre del negocio es obligatorio"); setLoading(false); return; }
-        await registro(form.usuario, form.password, form.nombre_negocio);
+        await registro(form.usuario, form.password, form.nombre_negocio, Number(form.tasa_cambio));
         await login(form.usuario, form.password);
         navigate("/dashboard");
       }
@@ -98,11 +98,19 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "register" && (
-              <div>
-                <label className="label">Nombre del negocio</label>
-                <input className="input" placeholder="Ej: Tienda Los Andes"
-                  value={form.nombre_negocio} onChange={e => set("nombre_negocio", e.target.value)} />
-              </div>
+              <>
+                <div>
+                  <label className="label">Nombre del negocio</label>
+                  <input className="input" placeholder="Ej: Tienda Los Andes"
+                    value={form.nombre_negocio} onChange={e => set("nombre_negocio", e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Tasa de cambio (C$ por USD $)</label>
+                  <input className="input" type="number" min="1" step="0.01" placeholder="Ej: 36"
+                    value={form.tasa_cambio} onChange={e => set("tasa_cambio", e.target.value)} />
+                  <p className="text-xs text-content-subtle mt-1">Usada para convertir预cios a dólares automáticamente</p>
+                </div>
+              </>
             )}
             <div>
               <label className="label">Usuario</label>

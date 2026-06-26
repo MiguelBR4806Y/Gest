@@ -1,32 +1,56 @@
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import joinedload
 from Backend.db.database import get_db
-from Backend.db.models import Producto, Movimiento
+from Backend.db.models import Producto, Movimiento, Promocion, Usuario
 from Backend.models.schema import ProductoCrear, RecargaInventario
 from Backend.routers.auth import verificar_token
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
 
+def _serializar(p, tasa=None):
+    promo = None
+    if p.promocion:
+        promo = {
+            "id": p.promocion.id,
+            "nombre": p.promocion.nombre,
+            "tipo": p.promocion.tipo,
+            "valor": p.promocion.valor,
+        }
+    pd = p.precio_dolar
+    if (pd is None or pd == 0) and p.precio > 0 and tasa:
+        pd = round(p.precio / tasa, 2)
+    return {
+        "id": p.id,
+        "nombre": p.nombre,
+        "categoria": p.categoria,
+        "stock": p.stock,
+        "stock_minimo": p.stock_minimo,
+        "precio": p.precio,
+        "precio_dolar": pd,
+        "promocion_id": p.promocion_id,
+        "promocion": promo,
+        "creado_en": str(p.creado_en),
+    }
+
+
 @router.get("/")
 def listar_productos(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        productos = session.query(Producto).filter(
-            Producto.usuario_id == usuario_id
-        ).all()
-        return [{
-            "id": p.id,
-            "nombre": p.nombre,
-            "categoria": p.categoria,
-            "stock": p.stock,
-            "stock_minimo": p.stock_minimo,
-            "precio": p.precio,
-            "creado_en": str(p.creado_en),
-        } for p in productos]
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        tasa = u.tasa_cambio if u else 36.0
+        productos = session.query(Producto).options(
+            joinedload(Producto.promocion)
+        ).filter(Producto.usuario_id == usuario_id).all()
+        return [_serializar(p, tasa) for p in productos]
 
 
 @router.post("/")
 def crear_producto(producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        tasa = u.tasa_cambio if u else 36.0
+        pd = producto.precio_dolar if producto.precio_dolar is not None else round(producto.precio / tasa, 2) if tasa else 0
         p = Producto(
             usuario_id=usuario_id,
             nombre=producto.nombre,
@@ -34,53 +58,50 @@ def crear_producto(producto: ProductoCrear, usuario_id: int = Depends(verificar_
             stock=producto.stock,
             stock_minimo=producto.stock_minimo,
             precio=producto.precio,
+            precio_dolar=pd,
+            promocion_id=producto.promocion_id,
         )
         session.add(p)
         session.flush()
-        return {"id": p.id, **producto.model_dump()}
+        return _serializar(p)
 
 
 @router.get("/stock-bajo")
 def stock_bajo(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        productos = session.query(Producto).filter(
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        tasa = u.tasa_cambio if u else 36.0
+        productos = session.query(Producto).options(
+            joinedload(Producto.promocion)
+        ).filter(
             Producto.usuario_id == usuario_id,
             Producto.stock <= Producto.stock_minimo
         ).all()
-        return [{
-            "id": p.id,
-            "nombre": p.nombre,
-            "categoria": p.categoria,
-            "stock": p.stock,
-            "stock_minimo": p.stock_minimo,
-            "precio": p.precio,
-            "creado_en": str(p.creado_en),
-        } for p in productos]
+        return [_serializar(p, tasa) for p in productos]
 
 
 @router.get("/{id}")
 def obtener_producto(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        p = session.query(Producto).filter(
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        tasa = u.tasa_cambio if u else 36.0
+        p = session.query(Producto).options(
+            joinedload(Producto.promocion)
+        ).filter(
             Producto.id == id,
             Producto.usuario_id == usuario_id
         ).first()
         if not p:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
-        return {
-            "id": p.id,
-            "nombre": p.nombre,
-            "categoria": p.categoria,
-            "stock": p.stock,
-            "stock_minimo": p.stock_minimo,
-            "precio": p.precio,
-            "creado_en": str(p.creado_en),
-        }
+        return _serializar(p, tasa)
 
 
 @router.put("/{id}")
 def editar_producto(id: int, producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        tasa = u.tasa_cambio if u else 36.0
+        pd = producto.precio_dolar if producto.precio_dolar is not None else round(producto.precio / tasa, 2) if tasa else 0
         session.query(Producto).filter(
             Producto.id == id,
             Producto.usuario_id == usuario_id
@@ -90,6 +111,8 @@ def editar_producto(id: int, producto: ProductoCrear, usuario_id: int = Depends(
             Producto.stock: producto.stock,
             Producto.stock_minimo: producto.stock_minimo,
             Producto.precio: producto.precio,
+            Producto.precio_dolar: pd,
+            Producto.promocion_id: producto.promocion_id,
         })
         return {"id": id, **producto.model_dump()}
 

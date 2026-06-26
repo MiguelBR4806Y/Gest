@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
-import { api, fmtMoney } from "../lib/api";
+import { api, fmtMoney, fmtMoneyUSD, formatHora } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import Modal from "../components/Modal";
-import { Plus, Pencil, PackagePlus, History, Trash2, Search, Package } from "lucide-react";
+import { Plus, Pencil, PackagePlus, History, Trash2, Search, Package, Tag } from "lucide-react";
 
-const EMPTY_FORM = { nombre: "", categoria: "", stock: 0, stock_minimo: 5, precio: 0 };
+const EMPTY_FORM = { nombre: "", categoria: "", stock: 0, stock_minimo: 5, precio: 0, precio_dolar: 0, promocion_id: null };
 
 export default function InventarioPage() {
+  const { user } = useAuth();
+  const tasa = user?.tasa_cambio ?? 36;
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -20,8 +23,9 @@ export default function InventarioPage() {
   const [recargarData, setRecargarData] = useState({ id: null, nombre: "", cantidad: 1 });
   const [historial, setHistorial]     = useState([]);
   const [saving, setSaving]           = useState(false);
+  const [promociones, setPromociones] = useState([]);
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => { cargar(); cargarPromos(); }, []);
 
   async function cargar() {
     setLoading(true);
@@ -32,6 +36,13 @@ export default function InventarioPage() {
     finally { setLoading(false); }
   }
 
+  async function cargarPromos() {
+    try {
+      const data = await api.get("/promociones/");
+      setPromociones(data.filter(p => p.activa));
+    } catch {}
+  }
+
   function setF(key, val) { setForm(f => ({ ...f, [key]: val })); }
   function setEF(key, val) { setEditForm(f => ({ ...f, [key]: val })); }
 
@@ -39,7 +50,14 @@ export default function InventarioPage() {
     if (!form.nombre.trim()) return;
     setSaving(true);
     try {
-      await api.post("/productos/", { ...form, stock: Number(form.stock), stock_minimo: Number(form.stock_minimo), precio: Number(form.precio) });
+      await api.post("/productos/", {
+        ...form,
+        stock: Number(form.stock),
+        stock_minimo: Number(form.stock_minimo),
+        precio: Number(form.precio),
+        precio_dolar: Number(form.precio_dolar),
+        promocion_id: form.promocion_id ? Number(form.promocion_id) : null,
+      });
       setAddOpen(false);
       setForm(EMPTY_FORM);
       cargar();
@@ -48,14 +66,24 @@ export default function InventarioPage() {
   }
 
   function abrirEditar(p) {
-    setEditForm({ id: p.id, nombre: p.nombre, categoria: p.categoria ?? "", stock: p.stock, stock_minimo: p.stock_minimo, precio: p.precio });
+    setEditForm({
+      id: p.id, nombre: p.nombre, categoria: p.categoria ?? "",
+      stock: p.stock, stock_minimo: p.stock_minimo,
+      precio: p.precio, precio_dolar: p.precio_dolar,
+      promocion_id: p.promocion_id,
+    });
     setEditOpen(true);
   }
 
   async function guardarEdicion() {
     setSaving(true);
     try {
-      await api.put(`/productos/${editForm.id}`, { nombre: editForm.nombre, categoria: editForm.categoria, stock: Number(editForm.stock), stock_minimo: Number(editForm.stock_minimo), precio: Number(editForm.precio) });
+      await api.put(`/productos/${editForm.id}`, {
+        nombre: editForm.nombre, categoria: editForm.categoria,
+        stock: Number(editForm.stock), stock_minimo: Number(editForm.stock_minimo),
+        precio: Number(editForm.precio), precio_dolar: Number(editForm.precio_dolar),
+        promocion_id: editForm.promocion_id ? Number(editForm.promocion_id) : null,
+      });
       setEditOpen(false);
       cargar();
     } catch(e) { alert(e.message); }
@@ -101,6 +129,12 @@ export default function InventarioPage() {
 
   const stockBajo = productos.filter(p => p.stock <= p.stock_minimo).length;
 
+  function labelPromo(promo) {
+    if (!promo) return null;
+    const map = { porcentaje: `${promo.valor}%`, "2x1": "2x1", monto_fijo: `C$${promo.valor}` };
+    return map[promo.tipo] ?? "";
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
@@ -138,7 +172,6 @@ export default function InventarioPage() {
                   <th className="th">Nombre</th>
                   <th className="th hidden sm:table-cell">Categoría</th>
                   <th className="th text-center">Stock</th>
-                  <th className="th text-center hidden md:table-cell">Mínimo</th>
                   <th className="th text-right hidden sm:table-cell">Precio</th>
                   <th className="th text-right">Acciones</th>
                 </tr>
@@ -149,13 +182,26 @@ export default function InventarioPage() {
                   return (
                     <tr key={p.id} className="table-row">
                       <td className="td text-content-subtle">{i + 1}</td>
-                      <td className="td font-medium text-content">{p.nombre}</td>
+                      <td className="td font-medium text-content">
+                        <div className="flex items-center gap-2">
+                          {p.nombre}
+                          {p.promocion && (
+                            <span className="badge-yellow text-[10px] px-1.5 py-0.5 flex items-center gap-0.5">
+                              <Tag size={9} />{labelPromo(p.promocion)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="td hidden sm:table-cell text-content-muted">{p.categoria || "—"}</td>
                       <td className="td text-center">
                         <span className={bajo ? "badge-red" : "badge-green"}>{p.stock}</span>
                       </td>
-                      <td className="td text-center hidden md:table-cell text-content-muted">{p.stock_minimo}</td>
-                      <td className="td text-right hidden sm:table-cell text-content">{fmtMoney(p.precio)}</td>
+                      <td className="td text-right hidden sm:table-cell">
+                        <div className="flex flex-col leading-tight">
+                          <span className="text-xs font-medium">{fmtMoneyUSD(p.precio_dolar)}</span>
+                          <span className="text-[10px] text-content-subtle">{fmtMoney(p.precio)}</span>
+                        </div>
+                      </td>
                       <td className="td">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => abrirEditar(p)} className="btn-ghost p-1.5" title="Editar">
@@ -205,6 +251,18 @@ export default function InventarioPage() {
           <div>
             <label className="label">Precio (C$)</label>
             <input className="input" type="number" min="0" step="0.01" value={form.precio} onChange={e => setF("precio", e.target.value)} />
+            {form.precio > 0 && (
+              <p className="text-xs text-content-subtle mt-1">
+                ≈ {fmtMoneyUSD(Number(form.precio) / tasa)} <span className="text-[10px]">(tasa {tasa})</span>
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="label">Promoción</label>
+            <select className="input" value={form.promocion_id ?? ""} onChange={e => setF("promocion_id", e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Sin promoción</option>
+              {promociones.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button className="btn-secondary" onClick={() => setAddOpen(false)}>Cancelar</button>
@@ -237,6 +295,18 @@ export default function InventarioPage() {
           <div>
             <label className="label">Precio (C$)</label>
             <input className="input" type="number" min="0" step="0.01" value={editForm.precio} onChange={e => setEF("precio", e.target.value)} />
+            {editForm.precio > 0 && (
+              <p className="text-xs text-content-subtle mt-1">
+                ≈ {fmtMoneyUSD(Number(editForm.precio) / tasa)} <span className="text-[10px]">(tasa {tasa})</span>
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="label">Promoción</label>
+            <select className="input" value={editForm.promocion_id ?? ""} onChange={e => setEF("promocion_id", e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Sin promoción</option>
+              {promociones.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button className="btn-secondary" onClick={() => setEditOpen(false)}>Cancelar</button>
@@ -279,7 +349,7 @@ export default function InventarioPage() {
                     <span className={h.tipo === "entrada" ? "badge-green" : "badge-red"}>{h.tipo}</span>
                   </td>
                   <td className="td text-center">{h.cantidad}</td>
-                  <td className="td text-right text-content-muted text-xs">{h.fecha_hora ?? h.fecha}</td>
+                  <td className="td text-right text-content-muted text-xs">{formatHora(h.fecha_hora ?? h.fecha)}</td>
                 </tr>
               ))}
             </tbody>

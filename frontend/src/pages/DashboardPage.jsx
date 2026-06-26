@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api, formatHora, fmtMoney } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Package, TrendingUp, Users, TriangleAlert as AlertTriangle, Send, Trash2, Bot, RefreshCw, Sparkles } from "lucide-react";
+import { Package, TrendingUp, Users, TriangleAlert as AlertTriangle, Send, Trash2, Bot, RefreshCw, Sparkles, DollarSign, X } from "lucide-react";
 
 function MetricCard({ icon: Icon, label, value, sub, color = "brand" }) {
   const colors = {
@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [pregunta, setPregunta] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dismissTasa, setDismissTasa] = useState(() => sessionStorage.getItem("dismissTasa") === "true");
   const chatRef = useRef(null);
 
   useEffect(() => { cargar(); }, []);
@@ -107,6 +108,26 @@ export default function DashboardPage() {
           <RefreshCw size={15} /> Actualizar
         </button>
       </div>
+
+      {/* Tasa de cambio notification */}
+      {!user?.tasa_cambio_configurada && !dismissTasa && (
+        <div className="card p-4 border border-accent-500/30 bg-gradient-to-r from-accent-500/5 to-transparent flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-accent-500/15 flex items-center justify-center shrink-0 mt-0.5">
+            <DollarSign size={17} className="text-accent-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-content">Configura tu tasa de cambio</p>
+            <p className="text-xs text-content-muted mt-0.5">
+              Establece la tasa de cambio C$ / USD para que los precios se conviertan automáticamente a dólares.
+              Puedes cambiarla en cualquier momento en Configuración.
+            </p>
+          </div>
+          <button onClick={() => { setDismissTasa(true); sessionStorage.setItem("dismissTasa", "true"); }}
+            className="shrink-0 text-content-muted hover:text-content transition-colors p-1">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

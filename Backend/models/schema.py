@@ -10,9 +10,27 @@ class ProductoCrear(BaseModel):
     stock: int = 0
     stock_minimo: int = 5
     precio: float = 0.0
+    precio_dolar: Optional[float] = None
+    promocion_id: Optional[int] = None
 
 class Producto(ProductoCrear):
     id: int
+    creado_en: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Promociones ──
+class PromocionCrear(BaseModel):
+    nombre: str
+    tipo: str  # 'porcentaje', '2x1', 'monto_fijo'
+    valor: float = 0.0
+    activa: bool = True
+
+class Promocion(PromocionCrear):
+    id: int
+    usuario_id: int
     creado_en: datetime
 
     class Config:
@@ -64,3 +82,8 @@ class MovimientoCrear(BaseModel):
 # ── Recarga de Inventario ──
 class RecargaInventario(BaseModel):
     cantidad: int
+
+
+# ── Tasa de Cambio ──
+class TasaCambioData(BaseModel):
+    tasa_cambio: float

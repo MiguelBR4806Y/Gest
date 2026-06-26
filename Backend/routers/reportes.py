@@ -5,7 +5,7 @@ from Backend.db.database import get_db
 from Backend.db.models import Usuario
 from Backend.ai.ia_service import analizar_ventas, responder_pregunta
 from Backend.routers.auth import verificar_token
-from datetime import date, timedelta
+from datetime import date, datetime, timezone, timedelta
 from collections import defaultdict
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
@@ -20,15 +20,17 @@ class PreguntaChat(BaseModel):
 @router.get("/dashboard")
 def dashboard(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        hoy = date.today().isoformat()
+        ahora_ni = datetime.now(timezone.utc) - timedelta(hours=6)
+        inicio = datetime(ahora_ni.year, ahora_ni.month, ahora_ni.day, 6, 0, 0, tzinfo=timezone.utc)
+        fin = inicio + timedelta(days=1)
 
         resumen = session.execute(
             text("""
                 SELECT COUNT(*) as numero_ventas, COALESCE(SUM(total), 0) as total_ventas
                 FROM ventas
-                WHERE usuario_id = :uid AND (fecha_hora AT TIME ZONE 'America/Managua')::date = :hoy
+                WHERE usuario_id = :uid AND fecha_hora >= :inicio AND fecha_hora < :fin
             """),
-            {"uid": usuario_id, "hoy": hoy}
+            {"uid": usuario_id, "inicio": inicio, "fin": fin}
         ).mappings().first()
 
         total_productos = session.execute(
@@ -60,22 +62,23 @@ def dashboard(usuario_id: int = Depends(verificar_token)):
 @router.get("/ventas")
 async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        hoy = date.today().isoformat()
+        ahora_ni = datetime.now(timezone.utc) - timedelta(hours=6)
+        inicio = datetime(ahora_ni.year, ahora_ni.month, ahora_ni.day, 6, 0, 0, tzinfo=timezone.utc)
+        fin = inicio + timedelta(days=1)
         ventas = session.execute(
             text("""
-                SELECT v.id, v.total,
-                       (v.fecha_hora AT TIME ZONE 'America/Managua') as fecha_hora,
+                SELECT v.id, v.total, v.fecha_hora,
                        c.nombre as cliente_nombre,
                        STRING_AGG(p.nombre, ', ') as productos
                 FROM ventas v
                 LEFT JOIN clientes c ON v.cliente_id = c.id
                 LEFT JOIN venta_items vi ON v.id = vi.venta_id
                 LEFT JOIN productos p ON vi.producto_id = p.id
-                WHERE v.usuario_id = :uid AND (v.fecha_hora AT TIME ZONE 'America/Managua')::date = :hoy
+                WHERE v.usuario_id = :uid AND v.fecha_hora >= :inicio AND v.fecha_hora < :fin
                 GROUP BY v.id, c.nombre
                 ORDER BY v.fecha_hora DESC
             """),
-            {"uid": usuario_id, "hoy": hoy}
+            {"uid": usuario_id, "inicio": inicio, "fin": fin}
         ).mappings().fetchall()
 
         datos = [dict(v) for v in ventas]
@@ -87,15 +90,13 @@ async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
 @router.get("/predictivos")
 def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        hoy = date.today()
-
-        hace_30 = (hoy - timedelta(days=30)).isoformat()
+        hace_30 = datetime.now(timezone.utc) - timedelta(days=30)
         ventas_items = session.execute(
             text("""
                 SELECT vi.producto_id, SUM(vi.cantidad) as total_vendido
                 FROM venta_items vi
                 JOIN ventas v ON vi.venta_id = v.id
-                WHERE v.usuario_id = :uid AND (v.fecha_hora AT TIME ZONE 'America/Managua')::date >= :hace30
+                WHERE v.usuario_id = :uid AND v.fecha_hora >= :hace30
                 GROUP BY vi.producto_id
             """),
             {"uid": usuario_id, "hace30": hace_30}
@@ -129,7 +130,7 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
 
         ventas_por_dia = session.execute(
             text("""
-                SELECT EXTRACT(DOW FROM fecha_hora AT TIME ZONE 'America/Managua')::text as dia_semana,
+                SELECT EXTRACT(DOW FROM fecha_hora)::text as dia_semana,
                        SUM(total) as total_ventas,
                        COUNT(*) as num_ventas
                 FROM ventas
@@ -153,15 +154,15 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
                 "num_ventas": v["num_ventas"],
             })
 
-        hace_30_dt = hoy - timedelta(days=30)
+        hace_30_dt = datetime.now(timezone.utc) - timedelta(days=30)
         ventas_30d = session.execute(
             text("""
-                SELECT (fecha_hora AT TIME ZONE 'America/Managua')::date as fecha, SUM(total) as total
+                SELECT fecha_hora::date as fecha, SUM(total) as total
                 FROM ventas
-                WHERE usuario_id = :uid AND (fecha_hora AT TIME ZONE 'America/Managua')::date >= :hace30
+                WHERE usuario_id = :uid AND fecha_hora >= :hace30
                 GROUP BY fecha
             """),
-            {"uid": usuario_id, "hace30": hace_30_dt.isoformat()}
+            {"uid": usuario_id, "hace30": hace_30_dt}
         ).mappings().fetchall()
 
         if ventas_30d:

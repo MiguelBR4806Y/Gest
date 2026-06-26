@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { api, formatHora, fmtMoney } from "../lib/api";
+import { api, formatHora, fmtMoney, fmtMoneyUSD } from "../lib/api";
 import Modal from "../components/Modal";
-import { Plus, Trash2, ShoppingCart, TrendingUp, Receipt, Search } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, TrendingUp, Receipt, Search, Tag } from "lucide-react";
 
 const METODOS = ["efectivo", "tarjeta", "transferencia", "credito"];
 
@@ -11,7 +11,10 @@ export default function VentasPage() {
   const [productos, setProductos] = useState([]);
   const [resumen, setResumen]     = useState({ total: 0, transacciones: 0, promedio: 0 });
   const [loading, setLoading]     = useState(true);
-  const [fecha, setFecha]         = useState(new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha]         = useState(() => {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  });
 
   const [nuevaOpen, setNuevaOpen] = useState(false);
   const [detalleOpen, setDetalleOpen] = useState(false);
@@ -58,7 +61,14 @@ export default function VentasPage() {
       if (existing >= 0) {
         return it.map((i, idx) => idx === existing ? { ...i, cantidad: i.cantidad + Number(selCant) } : i);
       }
-      return [...it, { producto_id: prod.id, nombre: prod.nombre, precio: prod.precio, cantidad: Number(selCant) }];
+      return [...it, {
+        producto_id: prod.id,
+        nombre: prod.nombre,
+        precio: prod.precio,
+        precio_dolar: prod.precio_dolar,
+        cantidad: Number(selCant),
+        promocion: prod.promocion || null,
+      }];
     });
     setSelProd("");
     setSelCant(1);
@@ -182,7 +192,7 @@ export default function VentasPage() {
                     <td className="td text-content-subtle">{i + 1}</td>
                     <td className="td font-medium text-content">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
                     <td className="td hidden md:table-cell text-content-muted text-xs">{v.productos ?? "—"}</td>
-                    <td className="td hidden sm:table-cell text-content-muted">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
+                    <td className="td hidden sm:table-cell text-content-muted">{formatHora(v.fecha_hora ?? v.fecha ?? v.hora)}</td>
                     <td className="td text-right font-semibold text-brand-400">{fmtMoney(v.total)}</td>
                     <td className="td hidden sm:table-cell">
                       <span className={metodoBadge(v.metodo_pago)}>{v.metodo_pago}</span>
@@ -229,7 +239,11 @@ export default function VentasPage() {
               <label className="label">Producto</label>
               <select className="input" value={selProd} onChange={e => setSelProd(e.target.value)}>
                 <option value="">Seleccionar...</option>
-                {productos.map(p => <option key={p.id} value={p.id}>{p.nombre} — {fmtMoney(p.precio)}</option>)}
+                {productos.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} — {fmtMoneyUSD(p.precio_dolar)} / {fmtMoney(p.precio)}{p.promocion ? ` [${p.promocion.nombre}]` : ""}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="w-20">
@@ -254,9 +268,23 @@ export default function VentasPage() {
                 <tbody>
                   {items.map((it, i) => (
                     <tr key={i} className="table-row">
-                      <td className="td">{it.nombre}</td>
+                      <td className="td">
+                        <div className="flex items-center gap-1.5">
+                          {it.nombre}
+                          {it.promocion && (
+                            <span className="badge-yellow text-[10px] px-1 py-0.5 flex items-center gap-0.5">
+                              <Tag size={8} />{it.promocion.tipo === "porcentaje" ? `${it.promocion.valor}%` : it.promocion.tipo === "2x1" ? "2x1" : `C$${it.promocion.valor}`}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="td text-center">{it.cantidad}</td>
-                      <td className="td text-right text-content-muted">{fmtMoney(it.precio)}</td>
+                      <td className="td text-right text-content-muted">
+                        <div className="flex flex-col leading-tight">
+                          <span className="text-xs">{fmtMoneyUSD(it.precio_dolar)}</span>
+                          <span className="text-[10px]">{fmtMoney(it.precio)}</span>
+                        </div>
+                      </td>
                       <td className="td text-right font-medium text-brand-400">{fmtMoney(it.precio * it.cantidad)}</td>
                       <td className="td">
                         <button onClick={() => quitarItem(i)} className="btn-ghost p-1 text-red-400 hover:text-red-300">
@@ -293,7 +321,7 @@ export default function VentasPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-content-muted">Cliente:</span> <span className="text-content ml-1">{ventaDetalle.cliente ?? "—"}</span></div>
               <div><span className="text-content-muted">Método:</span> <span className={`ml-1 ${metodoBadge(ventaDetalle.metodo_pago)}`}>{ventaDetalle.metodo_pago}</span></div>
-              <div><span className="text-content-muted">Hora:</span> <span className="text-content ml-1">{formatHora(ventaDetalle.hora ?? ventaDetalle.fecha)}</span></div>
+              <div><span className="text-content-muted">Hora:</span> <span className="text-content ml-1">{formatHora(ventaDetalle.fecha_hora ?? ventaDetalle.hora ?? ventaDetalle.fecha)}</span></div>
               <div><span className="text-content-muted">Total:</span> <span className="text-brand-400 font-bold ml-1">{fmtMoney(ventaDetalle.total)}</span></div>
             </div>
             {ventaDetalle.items && (

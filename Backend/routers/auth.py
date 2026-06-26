@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from Backend.db.database import get_db
 from Backend.db.models import Usuario
+from Backend.models.schema import TasaCambioData
 from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -29,11 +30,13 @@ class RegistroData(BaseModel):
     usuario: str
     password: str
     nombre_negocio: str = "Mi Negocio"
+    tasa_cambio: float = 36.0
 
 
 class PerfilData(BaseModel):
     nombre_negocio: str
     color_acento: str = "#1D9E75"
+    tasa_cambio: float = 36.0
 
 
 def crear_token(usuario_id: int, usuario: str) -> str:
@@ -67,7 +70,9 @@ def registro(datos: RegistroData):
         usuario = Usuario(
             usuario=datos.usuario,
             password=datos.password,
-            nombre_negocio=datos.nombre_negocio
+            nombre_negocio=datos.nombre_negocio,
+            tasa_cambio=datos.tasa_cambio,
+            tasa_cambio_configurada=True,
         )
         session.add(usuario)
         session.flush()
@@ -89,7 +94,9 @@ def login(datos: LoginData):
         return {
             "token": token,
             "usuario": usuario.usuario,
-            "nombre_negocio": usuario.nombre_negocio
+            "nombre_negocio": usuario.nombre_negocio,
+            "tasa_cambio": usuario.tasa_cambio,
+            "tasa_cambio_configurada": usuario.tasa_cambio_configurada,
         }
 
 
@@ -104,6 +111,8 @@ def obtener_perfil(usuario_id: int = Depends(verificar_token)):
             "logo_path": u.logo_path,
             "color_acento": u.color_acento,
             "modo_factura": u.modo_factura,
+            "tasa_cambio": u.tasa_cambio,
+            "tasa_cambio_configurada": u.tasa_cambio_configurada,
         }
 
 
@@ -113,6 +122,8 @@ def actualizar_perfil(datos: PerfilData, usuario_id: int = Depends(verificar_tok
         session.query(Usuario).filter(Usuario.id == usuario_id).update({
             Usuario.nombre_negocio: datos.nombre_negocio,
             Usuario.color_acento: datos.color_acento,
+            Usuario.tasa_cambio: datos.tasa_cambio,
+            Usuario.tasa_cambio_configurada: True,
         })
         return {"mensaje": "Perfil actualizado correctamente"}
 
@@ -162,3 +173,23 @@ async def subir_plantilla(
         })
 
     return {"mensaje": "Plantilla subida con éxito", "modo_factura": "personalizada"}
+
+
+@router.get("/tasa-cambio")
+def obtener_tasa_cambio(usuario_id: int = Depends(verificar_token)):
+    with get_db() as session:
+        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        if not u:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        return {"tasa_cambio": u.tasa_cambio}
+
+
+@router.put("/tasa-cambio")
+def actualizar_tasa_cambio(data: TasaCambioData, usuario_id: int = Depends(verificar_token)):
+    if data.tasa_cambio <= 0:
+        raise HTTPException(status_code=400, detail="La tasa debe ser mayor a cero")
+    with get_db() as session:
+        session.query(Usuario).filter(Usuario.id == usuario_id).update({
+            Usuario.tasa_cambio: data.tasa_cambio
+        })
+        return {"mensaje": "Tasa de cambio actualizada", "tasa_cambio": data.tasa_cambio}

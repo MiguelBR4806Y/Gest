@@ -1,20 +1,42 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy import func, text
+from sqlalchemy.orm import joinedload
 from Backend.db.database import get_db
-from Backend.db.models import Venta, VentaItem, Producto, Cliente, Movimiento
+from Backend.db.models import Venta, VentaItem, Producto, Cliente, Movimiento, Promocion
 from Backend.models.schema import VentaCrear
 from Backend.routers.auth import verificar_token
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])
+
+
+def _calcular_precio_final(p: Producto, cantidad: int, precio_unitario: float) -> tuple[float, str]:
+    if not p.promocion or not p.promocion.activa:
+        return precio_unitario * cantidad, ""
+    promo = p.promocion
+    if promo.tipo == "porcentaje":
+        desc = precio_unitario * cantidad * (promo.valor / 100)
+        return precio_unitario * cantidad - desc, f"desc. {promo.valor}%"
+    elif promo.tipo == "2x1":
+        gratis = cantidad // 2
+        pagar = cantidad - gratis
+        return pagar * precio_unitario, "2x1"
+    elif promo.tipo == "monto_fijo":
+        total = precio_unitario * cantidad
+        desc = min(promo.valor, total)
+        return total - desc, f"C${promo.valor:.0f} desc."
+    return precio_unitario * cantidad, ""
 
 
 @router.post("/")
 def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         total = 0
+        promos_aplicadas = []
         for item in venta.items:
-            p = session.query(Producto).filter(
+            p = session.query(Producto).options(
+                joinedload(Producto.promocion)
+            ).filter(
                 Producto.id == item.producto_id,
                 Producto.usuario_id == usuario_id
             ).first()
@@ -24,7 +46,10 @@ def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
             if p.stock < item.cantidad:
                 raise HTTPException(status_code=400, detail=f"Stock insuficiente para producto {item.producto_id}")
 
-            total += item.cantidad * item.precio_unitario
+            subtotal, nota = _calcular_precio_final(p, item.cantidad, item.precio_unitario)
+            total += subtotal
+            if nota:
+                promos_aplicadas.append(f"{p.nombre}: {nota}")
 
         if venta.cliente_id and venta.metodo_pago == "credito":
             c = session.query(Cliente).filter(
@@ -70,21 +95,26 @@ def crear_venta(venta: VentaCrear, usuario_id: int = Depends(verificar_token)):
                 Cliente.credito_usado: Cliente.credito_usado + total
             })
 
-        return {"id": venta_id, "total": total}
+        return {"id": venta_id, "total": total, "promos_aplicadas": promos_aplicadas}
 
 
 @router.get("/resumen-dia")
 def resumen_dia(usuario_id: int = Depends(verificar_token), fecha: str = Query(default=None)):
     with get_db() as session:
-        hoy = fecha if fecha else date.today().isoformat()
+        if fecha:
+            d = datetime.fromisoformat(fecha)
+        else:
+            d = (datetime.now(timezone.utc) - timedelta(hours=6)).date()
+        inicio = datetime(d.year, d.month, d.day, 6, 0, 0, tzinfo=timezone.utc)
+        fin = inicio + timedelta(days=1)
 
         resumen = session.execute(
             text("""
                 SELECT COUNT(*) as numero_ventas, COALESCE(SUM(total), 0) as total_ventas
                 FROM ventas
-                WHERE usuario_id = :uid AND (fecha_hora AT TIME ZONE 'UTC' AT TIME ZONE 'America/Managua')::date = :fecha
+                WHERE usuario_id = :uid AND fecha_hora >= :inicio AND fecha_hora < :fin
             """),
-            {"uid": usuario_id, "fecha": hoy}
+            {"uid": usuario_id, "inicio": inicio, "fin": fin}
         ).mappings().first()
 
         ultimas = session.execute(
@@ -103,10 +133,10 @@ def resumen_dia(usuario_id: int = Depends(verificar_token), fecha: str = Query(d
                     ) as productos
                 FROM ventas v
                 LEFT JOIN clientes c ON v.cliente_id = c.id
-                WHERE v.usuario_id = :uid AND (v.fecha_hora AT TIME ZONE 'UTC' AT TIME ZONE 'America/Managua')::date = :fecha
+                WHERE v.usuario_id = :uid AND v.fecha_hora >= :inicio AND v.fecha_hora < :fin
                 ORDER BY v.fecha_hora DESC
             """),
-            {"uid": usuario_id, "fecha": hoy}
+            {"uid": usuario_id, "inicio": inicio, "fin": fin}
         ).mappings().fetchall()
 
         return {

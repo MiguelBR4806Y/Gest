@@ -40,20 +40,21 @@ export const api = {
 
 export function formatHora(str) {
   if (!str) return "—";
-  let h, m;
   if (str.length === 5 && str.includes(":")) {
-    [h, m] = str.split(":").map(Number);
-  } else {
-    const clean = str.replace("T", " ");
-    const time = clean.split(" ")[1].slice(0, 5);
-    [h, m] = time.split(":").map(Number);
-    h = ((h - 6) + 24) % 24;
+    const [h, m] = str.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
   }
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return str;
+  return d.toLocaleString("es-NI", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 export function fmtMoney(n) {
   return "C$ " + Number(n ?? 0).toLocaleString("es-NI", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function fmtMoneyUSD(n) {
+  return "$ " + Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
