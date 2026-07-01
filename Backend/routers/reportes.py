@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from Backend.db.database import get_db
-from Backend.db.models import Usuario
+from Backend.db.models import Usuario, ChatMensaje
 from Backend.ai.ia_service import analizar_ventas, responder_pregunta
 from Backend.routers.auth import verificar_token
 from datetime import date, datetime, timezone, timedelta
@@ -240,8 +240,10 @@ async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)
             {"uid": usuario_id}
         ).mappings().fetchall()
 
+        tasa_cambio = u.tasa_cambio if u else 36.0
         contexto = {
             "nombre_negocio": nombre_negocio,
+            "tasa_cambio": tasa_cambio,
             "productos": [dict(p) for p in productos],
             "clientes": [dict(c) for c in clientes],
             "ventas": [dict(v) for v in ventas],
@@ -249,4 +251,19 @@ async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)
         }
 
     respuesta = await responder_pregunta(body.pregunta, contexto)
+
+    with get_db() as session:
+        session.add(ChatMensaje(usuario_id=usuario_id, role="user", text=body.pregunta))
+        session.add(ChatMensaje(usuario_id=usuario_id, role="ai", text=respuesta))
+
     return {"respuesta": respuesta}
+
+
+@router.get("/chat/historial")
+def historial_chat(usuario_id: int = Depends(verificar_token), limite: int = Query(default=50)):
+    with get_db() as session:
+        mensajes = session.query(ChatMensaje).filter(
+            ChatMensaje.usuario_id == usuario_id
+        ).order_by(ChatMensaje.creado_en.asc()).limit(limite).all()
+
+        return [{"id": m.id, "role": m.role, "text": m.text, "creado_en": m.creado_en.isoformat()} for m in mensajes]

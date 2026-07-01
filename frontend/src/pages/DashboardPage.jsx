@@ -39,7 +39,14 @@ export default function DashboardPage() {
   const [dismissTasa, setDismissTasa] = useState(() => sessionStorage.getItem("dismissTasa") === "true");
   const chatRef = useRef(null);
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => { cargar(); cargarHistorial(); }, []);
+
+  async function cargarHistorial() {
+    try {
+      const data = await api.get("/reportes/chat/historial");
+      setChat(data ?? []);
+    } catch {}
+  }
 
   async function cargar() {
     setLoading(true);
@@ -83,7 +90,7 @@ export default function DashboardPage() {
       const data = await api.post("/reportes/chat", { pregunta: q });
       setChat(c => [...c, { role: "ai", text: data.respuesta ?? "Sin respuesta" }]);
     } catch (e) {
-      setChat(c => [...c, { role: "ai", text: "Error al consultar la IA: " + e.message }]);
+      setChat(c => [...c, { role: "ai", text: "Error al consultar a Gesti: " + e.message }]);
     } finally {
       setChatLoading(false);
       setTimeout(() => chatRef.current?.scrollTo({ top: 99999, behavior: "smooth" }), 50);
@@ -145,7 +152,7 @@ export default function DashboardPage() {
               <Bot size={17} className="text-brand-400" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-brand-400 mb-1">Análisis IA del día</p>
+              <p className="text-xs font-semibold text-brand-400 mb-1">Análisis de Gesti</p>
               <p className="text-sm text-content leading-relaxed">{iaAnalisis}</p>
             </div>
           </div>
@@ -189,7 +196,7 @@ export default function DashboardPage() {
                   <p className="text-3xl font-bold text-content">{fmtMoney(predictivos.proyeccion)}</p>
                   <div className="flex items-center gap-1.5 mt-1">
                     <Sparkles size={12} className="text-accent-400" />
-                    <span className="text-xs text-accent-400">Predicción IA</span>
+                    <span className="text-xs text-accent-400">Predicción de Gesti</span>
                   </div>
                 </div>
               : <p className="text-sm text-content-subtle">Sin datos suficientes.</p>
@@ -205,7 +212,10 @@ export default function DashboardPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500/20 to-secondary-500/20 flex items-center justify-center">
               <Bot size={18} className="text-brand-400" />
             </div>
-            <h3 className="text-sm font-semibold text-content">Pregúntale a la IA sobre tu negocio</h3>
+            <div>
+              <h3 className="text-sm font-semibold text-content">Pregúntale a Gesti sobre tu negocio</h3>
+              <p className="text-xs text-content-muted mt-0.5">✨ Gesti · Tu asistente IA amigable</p>
+            </div>
           </div>
           {chat.length > 0 && (
             <button onClick={() => setChat([])} className="btn-ghost text-xs flex items-center gap-1.5 text-content-muted hover:text-red-400">
@@ -220,7 +230,7 @@ export default function DashboardPage() {
                 <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold ${
                   m.role === "user" ? "bg-gradient-to-br from-brand-500 to-secondary-500 text-white" : "bg-gray-700 text-content"
                 }`}>
-                  {m.role === "user" ? "Tú" : "IA"}
+                  {m.role === "user" ? "Tú" : "Gesti"}
                 </div>
                 <div className={`max-w-[80%] text-sm px-4 py-2.5 rounded-2xl leading-relaxed ${
                   m.role === "user" ? "bg-brand-500/15 text-content" : "bg-surface-elevated/60 text-content"
@@ -231,7 +241,7 @@ export default function DashboardPage() {
             ))}
             {chatLoading && (
               <div className="flex gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-content">IA</div>
+                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-content">Gesti</div>
                 <div className="bg-surface-elevated/60 px-4 py-3 rounded-2xl">
                   <div className="flex gap-1.5">
                     {[0,1,2].map(i => <div key={i} className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: `${i*150}ms` }} />)}

@@ -26,6 +26,7 @@ class Usuario(Base):
     clientes = relationship("Cliente", back_populates="usuario")
     ventas = relationship("Venta", back_populates="usuario")
     promociones = relationship("Promocion", back_populates="usuario")
+    chat_mensajes = relationship("ChatMensaje", back_populates="usuario")
 
 
 class Producto(Base):
@@ -102,6 +103,18 @@ class VentaItem(Base):
     precio_unitario = Column(Float, nullable=False)
 
     venta = relationship("Venta", back_populates="items")
+
+
+class ChatMensaje(Base):
+    __tablename__ = "chat_mensajes"
+
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    role = Column(String, nullable=False)
+    text = Column(Text, nullable=False)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario", back_populates="chat_mensajes")
 
 
 class Movimiento(Base):

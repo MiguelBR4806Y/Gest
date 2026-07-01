@@ -1,11 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Package, ChartBar as BarChart3, Users, Sparkles, Eye, EyeOff } from "lucide-react";
+import { Package, ChartBar as BarChart3, Users, Sparkles, Eye, EyeOff, Sun, Moon } from "lucide-react";
 
 export default function LoginPage() {
   const { login, registro } = useAuth();
   const navigate = useNavigate();
+  const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
   const [mode, setMode] = useState("login");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,11 +46,17 @@ export default function LoginPage() {
     { icon: Package,    title: "Inventario",  desc: "Control de stock en tiempo real con alertas de escasez automáticas." },
     { icon: BarChart3,  title: "Ventas",       desc: "Registra ventas, analiza métricas y proyecciones del negocio." },
     { icon: Users,      title: "Clientes",     desc: "Gestiona tu cartera, créditos e historial de compras." },
-    { icon: Sparkles,   title: "IA integrada", desc: "Consulta a la IA sobre tu negocio y obtén análisis predictivos." },
+    { icon: Sparkles,   title: "Gesti IA", desc: "Consulta a Gesti sobre tu negocio y obtén análisis predictivos." },
   ];
 
   return (
-    <div className="min-h-screen bg-surface flex">
+    <div className="min-h-screen bg-surface flex relative">
+      {/* Theme toggle */}
+      <button onClick={() => setDark(v => !v)}
+        className="fixed top-4 right-4 z-50 w-10 h-10 rounded-2xl bg-surface-card border border-border/60 flex items-center justify-center text-content-muted hover:text-content hover:border-content-subtle/30 hover:shadow-glow-sm transition-all duration-200"
+        title={dark ? "Modo claro" : "Modo oscuro"}>
+        {dark ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
       {/* Left panel */}
       <div className="hidden lg:flex flex-col flex-1 relative overflow-hidden px-16 py-14 justify-between">
         {/* Decorative gradient blobs */}
@@ -60,7 +72,7 @@ export default function LoginPage() {
             Gestiona tu negocio<br />de forma inteligente.
           </h1>
           <p className="text-content-muted text-lg leading-relaxed mb-14 max-w-lg">
-            Inventario, ventas, clientes y análisis con IA — todo desde un solo lugar.
+            Inventario, ventas, clientes y análisis con Gesti — todo desde un solo lugar.
           </p>
           <div className="grid grid-cols-1 gap-5 max-w-md">
             {features.map(({ icon: Icon, title, desc }) => (

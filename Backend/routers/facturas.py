@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from Backend.db.database import get_db
 from Backend.db.models import Usuario
@@ -23,8 +23,14 @@ DIAS_ES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domin
 router = APIRouter(prefix="/facturas", tags=["Facturas"])
 
 
-def fecha_a_nicaragua(fecha_hora_str: str) -> datetime:
-    limpio = fecha_hora_str.replace("T", " ")
+def fmt(valor: float) -> str:
+    return f"{valor:,.2f}"
+
+
+def fecha_a_nicaragua(fecha_hora) -> datetime:
+    if isinstance(fecha_hora, datetime):
+        return fecha_hora - timedelta(hours=6)
+    limpio = fecha_hora.replace("T", " ")
     dt = datetime.strptime(limpio[:19], "%Y-%m-%d %H:%M:%S")
     return dt - timedelta(hours=6)
 
@@ -59,12 +65,13 @@ def get_config_negocio(session, usuario: str) -> dict:
             "nombre_negocio": u.nombre_negocio or NOMBRE_NEGOCIO,
             "color_acento": u.color_acento or "#1D9E75",
             "logo_path": u.logo_path,
+            "tasa_cambio": u.tasa_cambio or 36.0,
         }
 
-    return {"nombre_negocio": NOMBRE_NEGOCIO, "color_acento": "#1D9E75", "logo_path": None}
+    return {"nombre_negocio": NOMBRE_NEGOCIO, "color_acento": "#1D9E75", "logo_path": None, "tasa_cambio": 36.0}
 
 
-def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, color_acento: str = None, logo_path: str = None) -> str:
+def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, color_acento: str = None, logo_path: str = None, tasa_cambio: float = 36.0) -> str:
     nombre = nombre_negocio or NOMBRE_NEGOCIO
     color = color_acento or "#1D9E75"
 
@@ -91,19 +98,34 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
     elementos.append(Paragraph(f"<b>Cliente:</b> {venta['cliente_nombre'] or 'Consumidor final'}", styles["Normal"]))
     elementos.append(Spacer(1, 0.3 * inch))
 
-    data = [["Producto", "Cantidad", "Precio unit.", "Subtotal"]]
+    cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=8)
+
+    data = [[
+        Paragraph("Producto", styles["Normal"]),
+        Paragraph("Cant.", styles["Normal"]),
+        Paragraph("Precio Unit.", styles["Normal"]),
+        Paragraph("Subtotal", styles["Normal"])
+    ]]
     for item in items:
         subtotal = item["cantidad"] * item["precio_unitario"]
+        subtotal_usd = subtotal / tasa_cambio
+        pu_usd = item["precio_unitario"] / tasa_cambio
         data.append([
-            item["nombre"],
-            str(item["cantidad"]),
-            f"C$ {item['precio_unitario']:.2f}",
-            f"C$ {subtotal:.2f}"
+            Paragraph(item["nombre"], cell_style),
+            Paragraph(str(item["cantidad"]), cell_style),
+            Paragraph(f"C$ {fmt(item['precio_unitario'])}<br/>US$ {fmt(pu_usd)}", cell_style),
+            Paragraph(f"C$ {fmt(subtotal)}<br/>US$ {fmt(subtotal_usd)}", cell_style),
         ])
 
-    data.append(["", "", "Total:", f"C$ {venta['total']:.2f}"])
+    total_usd = venta["total"] / tasa_cambio
+    data.append([
+        Paragraph("", cell_style),
+        Paragraph("", cell_style),
+        Paragraph("<b>Total:</b>", styles["Normal"]),
+        Paragraph(f"<b>C$ {fmt(venta['total'])}</b><br/><b>US$ {fmt(total_usd)}</b>", styles["Normal"]),
+    ])
 
-    tabla = Table(data, colWidths=[3*inch, 1*inch, 1.5*inch, 1.5*inch])
+    tabla = Table(data, colWidths=[3*inch, 0.7*inch, 1.65*inch, 1.65*inch])
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -140,7 +162,7 @@ def previsualizar_factura(
         {"nombre": "PlayStation 5", "cantidad": 1, "precio_unitario": 20500.00}
     ]
 
-    path = generar_pdf("preview", venta_dict, items_list, nombre_negocio, color_acento, config["logo_path"])
+    path = generar_pdf("preview", venta_dict, items_list, nombre_negocio, color_acento, config["logo_path"], config["tasa_cambio"])
     return FileResponse(path, media_type="application/pdf")
 
 
@@ -175,5 +197,5 @@ def obtener_factura(venta_id: int, usuario: str = Query(default="root")):
         venta_dict = dict(venta)
         items_list = [dict(i) for i in items]
 
-    path = generar_pdf(venta_id, venta_dict, items_list, config["nombre_negocio"], config["color_acento"], config["logo_path"])
+    path = generar_pdf(venta_id, venta_dict, items_list, config["nombre_negocio"], config["color_acento"], config["logo_path"], config["tasa_cambio"])
     return FileResponse(path, media_type="application/pdf")

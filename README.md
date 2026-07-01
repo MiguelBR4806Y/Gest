@@ -6,7 +6,7 @@ Sistema de gestión para negocios locales (inventario, ventas, facturación, cli
 
 - **Backend**: Python 3.11+ · FastAPI · PostgreSQL · SQLAlchemy
 - **Frontend**: React 19 + Vite 8 + Tailwind CSS 3 + react-router-dom v7
-- **IA**: Groq (Llama 3.3 70B) — análisis de ventas, chat inteligente y reportes predictivos. También soporta OpenAI y Ollama.
+- **IA**: **Gesti** — asistente inteligente amigable con Groq (Llama 3.3 70B), OpenAI u Ollama. Análisis de ventas, chat conversacional con historial persistente y reportes predictivos.
 
 ---
 
@@ -68,7 +68,7 @@ npm run dev
 
 ---
 
-## Configurar la IA
+## Configurar la IA (Gesti)
 
 Crea una cuenta gratis en [console.groq.com](https://console.groq.com) y agrega en `.env`:
 
@@ -78,6 +78,8 @@ GROQ_API_KEY=tu_key_aqui
 ```
 
 Alternativas: OpenAI (`NICAGEST_IA_MODO=openai`) u Ollama (`NICAGEST_IA_MODO=ollama`).
+
+> Gesti es el asistente IA de la plataforma. Responde con tono amigable, conoce tu inventario, clientes, ventas y la **tasa de cambio** configurada. Las conversaciones se guardan automáticamente y se recuperan al volver al Dashboard.
 
 ---
 
@@ -89,20 +91,21 @@ Gest/
 ├── requirements.txt
 ├── .env
 ├── Backend/
-│   ├── ai/ia_service.py            ← Switch Groq / OpenAI / Ollama
+│   ├── ai/ia_service.py            ← Gesti (Groq / OpenAI / Ollama)
 │   ├── db/
 │   │   ├── database.py             ← SQLAlchemy engine + session
-│   │   ├── models.py               ← Modelos ORM
+│   │   ├── models.py               ← Modelos ORM (Usuario, Producto, Venta, ChatMensaje…)
 │   │   └── schema.sql              ← (legacy, ya no se usa)
 │   ├── models/schema.py            ← Modelos Pydantic
 │   └── routers/
-│       ├── auth.py                 ← JWT + perfil
+│       ├── auth.py                 ← JWT + perfil + tasa de cambio
 │       ├── productos.py            ← Inventario y movimientos
 │       ├── ventas.py               ← Punto de venta
 │       ├── clientes.py             ← Clientes y crédito
-│       ├── reportes.py             ← Dashboard, IA, predictivos
-│       ├── facturas.py             ← PDF con reportlab
-│       └── organizacion.py         ← Navegación jerárquica de facturas
+│       ├── reportes.py             ← Dashboard, Gesti, predictivos, chat con historial
+│       ├── facturas.py             ← PDF con reportlab (C$ + US$, formato miles)
+│       ├── organizacion.py         ← Navegación jerárquica de facturas
+│       └── promociones.py          ← Promociones y descuentos
 └── Frontend/
     ├── package.json
     ├── tailwind.config.js
@@ -126,6 +129,21 @@ Gest/
 
 ---
 
+## Facturas PDF
+
+Las facturas generadas incluyen:
+- **Doble moneda**: montos en C$ (córdobas) y US$ (dólares), convertidos según la tasa de cambio configurada.
+- **Formato de miles**: todos los valores numéricos separados con coma (ej. `C$ 20,500.00`).
+- Logo del negocio, color de acento y organización por semana/día.
+
+## Historial de chat
+
+Las conversaciones con Gesti se guardan automáticamente en la base de datos. Al volver al Dashboard, el historial se carga y puedes retomar la conversación donde la dejaste.
+
 ## Temas
 
 La aplicación soporta **tema claro y oscuro**. El toggle está en el sidebar. La preferencia se guarda en `localStorage`.
+
+## Tasa de cambio
+
+Cada usuario puede configurar su propia tasa de cambio C$/USD desde el perfil. Gesti la conoce y la usa al responder preguntas sobre valores en dólares. También se usa en las facturas PDF para mostrar el equivalente en US$.
