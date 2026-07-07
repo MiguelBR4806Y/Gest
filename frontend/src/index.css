@@ -6,53 +6,53 @@
   * { box-sizing: border-box; }
 
   :root {
-    --brand-50: 252 247 243;
-    --brand-100: 245 237 229;
-    --brand-200: 240 226 214;
-    --brand-300: 234 216 202;
-    --brand-400: 232 214 202;
-    --brand-500: 232 214 202;
-    --brand-600: 212 191 176;
-    --brand-700: 191 165 150;
-    --brand-800: 168 139 124;
-    --brand-900: 140 113 99;
+    --brand-50: 248 246 244;
+    --brand-100: 240 237 233;
+    --brand-200: 228 223 217;
+    --brand-300: 215 209 202;
+    --brand-400: 200 192 184;
+    --brand-500: 185 175 165;
+    --brand-600: 165 153 142;
+    --brand-700: 142 130 118;
+    --brand-800: 118 106 95;
+    --brand-900: 92 82 72;
 
-    --secondary-50: 245 239 233;
-    --secondary-100: 237 224 212;
-    --secondary-200: 221 205 190;
-    --secondary-300: 206 186 167;
-    --secondary-400: 201 179 158;
-    --secondary-500: 196 172 149;
-    --secondary-600: 174 150 127;
-    --secondary-700: 151 128 106;
-    --secondary-800: 127 106 86;
-    --secondary-900: 102 84 66;
+    --secondary-50: 240 250 245;
+    --secondary-100: 220 242 230;
+    --secondary-200: 190 230 210;
+    --secondary-300: 155 215 185;
+    --secondary-400: 125 200 165;
+    --secondary-500: 72 180 130;
+    --secondary-600: 55 155 110;
+    --secondary-700: 40 128 88;
+    --secondary-800: 28 100 66;
+    --secondary-900: 18 72 46;
 
-    --accent-50: 240 247 247;
-    --accent-100: 218 237 239;
-    --accent-200: 197 226 229;
-    --accent-300: 181 215 218;
-    --accent-400: 173 209 212;
-    --accent-500: 165 204 207;
-    --accent-600: 142 181 184;
-    --accent-700: 120 157 160;
-    --accent-800: 98 133 136;
-    --accent-900: 76 108 110;
+    --accent-50: 236 248 245;
+    --accent-100: 208 240 233;
+    --accent-200: 178 230 219;
+    --accent-300: 148 220 206;
+    --accent-400: 108 200 182;
+    --accent-500: 70 165 150;
+    --accent-600: 52 142 128;
+    --accent-700: 38 118 105;
+    --accent-800: 26 92 80;
+    --accent-900: 16 66 57;
 
-    --surface: 245 240 236;
-    --surface-card: 255 255 255;
-    --surface-elevated: 237 228 220;
+    --surface: 239 237 234;
+    --surface-card: 254 253 252;
+    --surface-elevated: 232 230 227;
     --surface-hover: 0 0 0 / 0.04;
 
-    --on-surface: 44 36 32;
-    --on-muted: 122 110 102;
-    --on-subtle: 163 152 142;
+    --on-surface: 35 32 30;
+    --on-muted: 85 80 75;
+    --on-subtle: 135 130 125;
 
-    --border-default: 212 201 191;
+    --border-default: 220 215 210;
 
     --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.08), 0 0 6px -2px rgba(0, 0, 0, 0.02);
-    --shadow-glow: 0 0 20px rgba(232, 214, 202, 0.15);
-    --shadow-glow-sm: 0 0 12px rgba(232, 214, 202, 0.1);
+    --shadow-glow: 0 0 20px rgba(108, 200, 182, 0.15);
+    --shadow-glow-sm: 0 0 12px rgba(108, 200, 182, 0.1);
   }
 
   .dark {
@@ -120,6 +120,9 @@
   .card {
     @apply bg-surface-card border border-border rounded-2xl shadow-soft;
   }
+  .card-flat {
+    @apply bg-surface-elevated border border-border/50 rounded-2xl;
+  }
   .card-hover {
     @apply card transition-all duration-200 hover:border-content-subtle/30 hover:shadow-glow-sm;
   }
@@ -128,31 +131,31 @@
   }
   .card-gradient::before {
     content: '';
-    @apply absolute inset-0 opacity-[0.03] pointer-events-none;
+    @apply absolute inset-0 opacity-[0.06] pointer-events-none;
     background: radial-gradient(ellipse at top left, rgb(var(--brand-500)), transparent 70%),
                 radial-gradient(ellipse at bottom right, rgb(var(--secondary-500)), transparent 70%);
   }
 
   .btn-primary {
-    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-5 py-2.5 rounded-xl
+    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-5 py-2.5 rounded-lg
            transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
            shadow-glow-sm hover:shadow-glow active:scale-[0.97];
   }
   .btn-secondary {
-    @apply bg-surface-hover hover:bg-content-subtle/15 text-content font-medium px-5 py-2.5 rounded-xl
+    @apply bg-surface-hover hover:bg-content-subtle/15 text-content font-medium px-5 py-2.5 rounded-lg
            transition-all duration-200 border border-border hover:border-content-subtle/30 active:scale-[0.97];
   }
   .btn-danger {
-    @apply bg-red-900/20 hover:bg-red-800/30 text-red-400 font-medium px-5 py-2.5 rounded-xl
+    @apply bg-red-900/20 hover:bg-red-800/30 text-red-400 font-medium px-5 py-2.5 rounded-lg
            transition-all duration-200 border border-red-800/20 hover:border-red-700/30 active:scale-[0.97];
   }
   .btn-ghost {
-    @apply hover:bg-surface-hover text-content-muted hover:text-content px-3 py-2 rounded-xl
+    @apply hover:bg-surface-hover text-content-muted hover:text-content px-3 py-2 rounded-lg
            transition-all duration-200;
   }
 
   .input {
-    @apply bg-surface border border-border text-content rounded-xl px-4 py-2.5 w-full
+    @apply bg-surface border border-border text-content rounded-lg px-4 py-2.5 w-full
            focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60
            placeholder:text-content-subtle transition-all duration-200;
   }
@@ -177,7 +180,7 @@
   }
 
   .table-container {
-    @apply card overflow-hidden;
+    @apply bg-surface-elevated border border-border/50 rounded-2xl overflow-hidden;
   }
   .table-container table {
     @apply w-full;
@@ -186,10 +189,10 @@
     @apply border-b border-border;
   }
   .th {
-    @apply text-xs font-semibold text-content-subtle uppercase tracking-wider px-5 py-3.5 text-left;
+    @apply text-xs font-semibold text-content-subtle uppercase tracking-wider px-4 py-3 text-left;
   }
   .td {
-    @apply px-5 py-3.5 text-sm text-content;
+    @apply px-4 py-3 text-sm text-content;
   }
   .table-row {
     @apply border-b border-border/50 transition-all duration-150 hover:bg-surface-hover;
@@ -199,10 +202,22 @@
   }
 
   .metric-card {
-    @apply card-gradient p-5 flex items-start gap-4;
+    @apply card-gradient p-6 flex items-start gap-4;
   }
   .metric-icon {
     @apply w-11 h-11 rounded-2xl flex items-center justify-center shrink-0;
+  }
+
+  .card-accent {
+    @apply card relative overflow-hidden;
+  }
+  .card-accent::before {
+    content: '';
+    @apply absolute top-0 left-0 right-0 h-0.5 bg-accent-500;
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-content;
   }
 
   .page-header {

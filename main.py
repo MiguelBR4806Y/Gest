@@ -3,7 +3,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from dotenv import load_dotenv
 import os
+
+load_dotenv()
 
 from Backend.db import inicializar_db
 from Backend.routers import productos, clientes, ventas, reportes, auth, facturas, organizacion, promociones

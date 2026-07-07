@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api, fmtMoney, formatHora } from "../lib/api";
 import Modal from "../components/Modal";
 import { Plus, Pencil, Users, CreditCard, History, Trash2, Search } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 const EMPTY = { nombre: "", telefono: "", credito_limite: 0 };
 
@@ -20,6 +21,7 @@ export default function ClientesPage() {
   const [saving, setSaving]         = useState(false);
 
   useEffect(() => { cargar(); }, []);
+  const { toast } = useToast();
 
   async function cargar() {
     setLoading(true);
@@ -39,7 +41,7 @@ export default function ClientesPage() {
       setAddOpen(false);
       setForm(EMPTY);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -58,7 +60,7 @@ export default function ClientesPage() {
       });
       setEditOpen(false);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -72,7 +74,7 @@ export default function ClientesPage() {
   async function eliminar(id) {
     if (!confirm("¿Eliminar este cliente?")) return;
     try { await api.delete(`/clientes/${id}`); cargar(); }
-    catch(e) { alert(e.message); }
+    catch(e) { toast(e.message, "error"); }
   }
 
   const filtrados = clientes.filter(c =>
@@ -108,7 +110,7 @@ export default function ClientesPage() {
             <p className="text-xl font-bold text-content">{totalClientes}</p>
           </div>
         </div>
-        <div className="card-gradient p-5 flex items-start gap-4 border border-accent-500/20 bg-gradient-to-br from-accent-500/5 to-transparent">
+        <div className="card-gradient p-6 flex items-start gap-4 border border-accent-500/20 bg-gradient-to-br from-accent-500/5 to-transparent">
           <div className="metric-icon bg-accent-500/10">
             <CreditCard size={20} className="text-accent-400" />
           </div>
@@ -117,7 +119,7 @@ export default function ClientesPage() {
             <p className="text-xl font-bold text-content">{conCredito}</p>
           </div>
         </div>
-        <div className="card-gradient p-5 flex items-start gap-4 border border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent">
+        <div className="card-gradient p-6 flex items-start gap-4 border border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent">
           <div className="metric-icon bg-red-500/10">
             <CreditCard size={20} className="text-red-400" />
           </div>

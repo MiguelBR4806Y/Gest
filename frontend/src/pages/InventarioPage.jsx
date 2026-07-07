@@ -3,11 +3,13 @@ import { api, fmtMoney, fmtMoneyUSD, formatHora } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import Modal from "../components/Modal";
 import { Plus, Pencil, PackagePlus, History, Trash2, Search, Package, Tag } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 const EMPTY_FORM = { nombre: "", categoria: "", stock: 0, stock_minimo: 5, precio: 0, precio_dolar: 0, promocion_id: null };
 
 export default function InventarioPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const tasa = user?.tasa_cambio ?? 36;
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ export default function InventarioPage() {
       setAddOpen(false);
       setForm(EMPTY_FORM);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -86,7 +88,7 @@ export default function InventarioPage() {
       });
       setEditOpen(false);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -101,7 +103,7 @@ export default function InventarioPage() {
       await api.post(`/productos/${recargarData.id}/recargar`, { cantidad: Number(recargarData.cantidad) });
       setRecargarOpen(false);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -119,7 +121,7 @@ export default function InventarioPage() {
     try {
       await api.delete(`/productos/${id}`);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
   }
 
   const filtrados = productos.filter(p =>

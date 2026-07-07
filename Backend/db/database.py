@@ -48,6 +48,15 @@ def inicializar_db():
         session.execute(text(
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS zona_horaria VARCHAR DEFAULT 'America/Managua'"
         ))
+        session.execute(text(
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR"
+        ))
+        session.execute(text(
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE"
+        ))
+        session.execute(text(
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS verificacion_token VARCHAR"
+        ))
 
         root = session.query(Usuario).filter(Usuario.usuario == "root").first()
         if not root:

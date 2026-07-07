@@ -12,7 +12,10 @@ class Usuario(Base):
 
     id = Column(Integer, primary_key=True)
     usuario = Column(String, nullable=False, unique=True)
-    password = Column(String, nullable=False)
+    password = Column(String, nullable=True)
+    email = Column(String, nullable=True, unique=True)
+    provider = Column(String, nullable=True)
+    provider_id = Column(String, nullable=True)
     nombre_negocio = Column(String, default="Mi Negocio")
     logo_path = Column(Text, nullable=True)
     color_acento = Column(String, default="#1D9E75")
@@ -21,6 +24,8 @@ class Usuario(Base):
     tasa_cambio = Column(Float, default=36.0)
     tasa_cambio_configurada = Column(Boolean, default=False)
     zona_horaria = Column(String, default="America/Managua")
+    email_verified = Column(Boolean, default=False)
+    verificacion_token = Column(String, nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
     productos = relationship("Producto", back_populates="usuario")

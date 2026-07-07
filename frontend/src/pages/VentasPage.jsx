@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api, formatHora, fmtMoney, fmtMoneyUSD } from "../lib/api";
 import Modal from "../components/Modal";
 import { Plus, Trash2, ShoppingCart, TrendingUp, Receipt, Search, Tag } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 const METODOS = ["efectivo", "tarjeta", "transferencia", "credito"];
 
@@ -25,6 +26,7 @@ export default function VentasPage() {
   const [selProd, setSelProd] = useState("");
   const [selCant, setSelCant] = useState(1);
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -79,7 +81,7 @@ export default function VentasPage() {
   const totalVenta = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
 
   async function registrarVenta() {
-    if (items.length === 0) { alert("Agrega al menos un producto"); return; }
+    if (items.length === 0) { toast("Agrega al menos un producto", "info"); return; }
     setSaving(true);
     try {
       await api.post("/ventas/", {
@@ -89,7 +91,7 @@ export default function VentasPage() {
       });
       setNuevaOpen(false);
       cargar();
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -104,7 +106,7 @@ export default function VentasPage() {
   async function anularVenta(id) {
     if (!confirm("¿Anular esta venta?")) return;
     try { await api.delete(`/ventas/${id}`); cargar(); }
-    catch(e) { alert(e.message); }
+    catch(e) { toast(e.message, "error"); }
   }
 
   const metodoBadge = (m) => {
@@ -135,7 +137,7 @@ export default function VentasPage() {
             <p className="text-xl font-bold text-brand-400">{fmtMoney(resumen.total)}</p>
           </div>
         </div>
-        <div className="card-gradient p-5 flex items-start gap-4">
+        <div className="card-gradient p-6 flex items-start gap-4">
           <div className="metric-icon bg-secondary-500/10">
             <Receipt size={20} className="text-secondary-400" />
           </div>
@@ -144,7 +146,7 @@ export default function VentasPage() {
             <p className="text-xl font-bold text-content">{resumen.transacciones}</p>
           </div>
         </div>
-        <div className="card-gradient p-5 flex items-start gap-4">
+        <div className="card-gradient p-6 flex items-start gap-4">
           <div className="metric-icon bg-accent-500/10">
             <ShoppingCart size={20} className="text-accent-400" />
           </div>

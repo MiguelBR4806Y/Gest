@@ -88,3 +88,8 @@ class RecargaInventario(BaseModel):
 # ── Tasa de Cambio ──
 class TasaCambioData(BaseModel):
     tasa_cambio: float
+
+
+# ── Auth / OAuth ──
+class GoogleOAuthData(BaseModel):
+    credential: str

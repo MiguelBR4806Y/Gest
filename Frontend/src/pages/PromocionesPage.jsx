@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 import Modal from "../components/Modal";
 import { Plus, Pencil, Trash2, Tag, Percent, DollarSign, Package } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 const TIPOS = [
   { value: "porcentaje", label: "Descuento %", icon: Percent },
@@ -19,6 +20,7 @@ export default function PromocionesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM, id: null });
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => { cargar(); }, []);
 
@@ -45,7 +47,7 @@ export default function PromocionesPage() {
       setAddOpen(false);
       setForm(EMPTY_FORM);
       cargar();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -66,7 +68,7 @@ export default function PromocionesPage() {
       });
       setEditOpen(false);
       cargar();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, "error"); }
     finally { setSaving(false); }
   }
 
@@ -75,7 +77,7 @@ export default function PromocionesPage() {
     try {
       await api.delete(`/promociones/${id}`);
       cargar();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, "error"); }
   }
 
   function descTipo(tipo) {

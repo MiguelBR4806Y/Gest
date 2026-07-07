@@ -1,23 +1,69 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Package, ChartBar as BarChart3, Users, Sparkles, Eye, EyeOff, Sun, Moon } from "lucide-react";
+import { useToast } from "../context/ToastContext";
+import { Package, BarChart3 as BarChart3Icon, Users, Sparkles, Eye, EyeOff, Sun, Moon } from "lucide-react";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 export default function LoginPage() {
-  const { login, registro } = useAuth();
+  const { login, registro, googleLogin } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
+  const googleBtnRef = useRef(null);
+  const [googleReady, setGoogleReady] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    const checkGoogle = () => {
+      if (window.google?.accounts?.id) {
+        setGoogleReady(true);
+      } else {
+        setTimeout(checkGoogle, 200);
+      }
+    };
+    checkGoogle();
+  }, []);
+
+  useEffect(() => {
+    if (!googleReady || !googleBtnRef.current) return;
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleResponse,
+    });
+    window.google.accounts.id.renderButton(googleBtnRef.current, {
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      shape: "rectangular",
+      width: googleBtnRef.current.offsetWidth || 320,
+    });
+  }, [googleReady]);
+
+  async function handleGoogleResponse(response) {
+    setLoading(true);
+    try {
+      await googleLogin(response.credential);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Error al iniciar sesión con Google");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const [mode, setMode] = useState("login");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [form, setForm] = useState({ usuario: "", password: "", nombre_negocio: "", tasa_cambio: 36 });
+  const [form, setForm] = useState({ usuario: "", password: "", email: "", nombre_negocio: "", tasa_cambio: 36 });
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); setError(""); }
 
@@ -31,7 +77,7 @@ export default function LoginPage() {
         navigate("/dashboard");
       } else {
         if (!form.nombre_negocio.trim()) { setError("El nombre del negocio es obligatorio"); setLoading(false); return; }
-        await registro(form.usuario, form.password, form.nombre_negocio, Number(form.tasa_cambio));
+        await registro(form.usuario, form.password, form.nombre_negocio, Number(form.tasa_cambio), form.email);
         await login(form.usuario, form.password);
         navigate("/dashboard");
       }
@@ -43,23 +89,21 @@ export default function LoginPage() {
   }
 
   const features = [
-    { icon: Package,    title: "Inventario",  desc: "Control de stock en tiempo real con alertas de escasez automáticas." },
-    { icon: BarChart3,  title: "Ventas",       desc: "Registra ventas, analiza métricas y proyecciones del negocio." },
-    { icon: Users,      title: "Clientes",     desc: "Gestiona tu cartera, créditos e historial de compras." },
-    { icon: Sparkles,   title: "Gesti IA", desc: "Consulta a Gesti sobre tu negocio y obtén análisis predictivos." },
+    { icon: Package,       title: "Inventario",  desc: "Control de stock en tiempo real con alertas de escasez automáticas." },
+    { icon: BarChart3Icon, title: "Ventas",       desc: "Registra ventas, analiza métricas y proyecciones del negocio." },
+    { icon: Users,         title: "Clientes",     desc: "Gestiona tu cartera, créditos e historial de compras." },
+    { icon: Sparkles,      title: "Gesti IA",     desc: "Consulta a Gesti sobre tu negocio y obtén análisis predictivos." },
   ];
 
   return (
     <div className="min-h-screen bg-surface flex relative">
-      {/* Theme toggle */}
       <button onClick={() => setDark(v => !v)}
         className="fixed top-4 right-4 z-50 w-10 h-10 rounded-2xl bg-surface-card border border-border/60 flex items-center justify-center text-content-muted hover:text-content hover:border-content-subtle/30 hover:shadow-glow-sm transition-all duration-200"
         title={dark ? "Modo claro" : "Modo oscuro"}>
         {dark ? <Sun size={18} /> : <Moon size={18} />}
       </button>
-      {/* Left panel */}
+
       <div className="hidden lg:flex flex-col flex-1 relative overflow-hidden px-16 py-14 justify-between">
-        {/* Decorative gradient blobs */}
         <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-brand-500/5 blur-3xl" />
         <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-secondary-500/5 blur-3xl" />
 
@@ -91,7 +135,6 @@ export default function LoginPage() {
         <p className="text-xs text-content-subtle relative">© 2026 Bravo's Gest. Todos los derechos reservados.</p>
       </div>
 
-      {/* Right panel */}
       <div className="flex flex-col items-center justify-center w-full lg:w-[420px] shrink-0 px-8 py-12 relative">
         <div className="absolute inset-0 bg-gradient-to-b from-brand-500/[0.03] to-transparent pointer-events-none" />
 
@@ -117,6 +160,11 @@ export default function LoginPage() {
                     value={form.nombre_negocio} onChange={e => set("nombre_negocio", e.target.value)} />
                 </div>
                 <div>
+                  <label className="label">Correo electrónico</label>
+                  <input className="input" type="email" placeholder="ejemplo@correo.com"
+                    value={form.email} onChange={e => set("email", e.target.value)} />
+                </div>
+                <div>
                   <label className="label">Tasa de cambio (C$ por USD $)</label>
                   <input className="input" type="number" min="1" step="0.01" placeholder="Ej: 36"
                     value={form.tasa_cambio} onChange={e => set("tasa_cambio", e.target.value)} />
@@ -140,6 +188,12 @@ export default function LoginPage() {
                   {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
+              {mode === "login" && (
+                <button type="button" onClick={() => toast("Contacta al administrador para restablecer tu contraseña.", "info")}
+                  className="text-xs text-content-muted hover:text-content transition-colors mt-1">
+                  ¿Olvidaste tu contraseña?
+                </button>
+              )}
             </div>
 
             {error && (
@@ -151,9 +205,24 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {GOOGLE_CLIENT_ID && (
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/60" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-surface-card px-3 text-xs text-content-muted">O continúa con</span>
+              </div>
+            </div>
+          )}
+
+          {GOOGLE_CLIENT_ID && (
+            <div ref={googleBtnRef} className="flex justify-center min-h-[40px]" />
+          )}
+
           <p className="text-center text-sm text-content-muted mt-7">
             {mode === "login" ? "¿No tienes cuenta? " : "¿Ya tienes cuenta? "}
-            <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setForm({ usuario: "", password: "", nombre_negocio: "" }); }}
+            <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setForm({ usuario: "", password: "", email: "", nombre_negocio: "" }); }}
               className="text-brand-400 hover:text-brand-300 font-medium transition-colors">
               {mode === "login" ? "Regístrate" : "Inicia sesión"}
             </button>

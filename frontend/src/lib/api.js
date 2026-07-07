@@ -33,7 +33,7 @@ export const api = {
   get:    (path)        => request("GET",    path),
   post:   (path, body)  => request("POST",   path, body),
   put:    (path, body)  => request("PUT",    path, body),
-  delete: (path)        => request("DELETE", path),
+  delete: (path, body)  => request("DELETE", path, body),
   postForm: async (path, formData) => {
     const res = await fetch(BASE + path, {
       method: "POST",
