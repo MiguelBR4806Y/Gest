@@ -120,7 +120,7 @@ export default function LoginPage() {
                   <label className="label">Tasa de cambio (C$ por USD $)</label>
                   <input className="input" type="number" min="1" step="0.01" placeholder="Ej: 36"
                     value={form.tasa_cambio} onChange={e => set("tasa_cambio", e.target.value)} />
-                  <p className="text-xs text-content-subtle mt-1">Usada para convertir预cios a dólares automáticamente</p>
+                  <p className="text-xs text-content-subtle mt-1">Usada para convertir monedas a dólares automáticamente</p>
                 </div>
               </>
             )}

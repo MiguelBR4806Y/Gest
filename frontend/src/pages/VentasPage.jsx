@@ -319,7 +319,7 @@ export default function VentasPage() {
         {ventaDetalle && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-content-muted">Cliente:</span> <span className="text-content ml-1">{ventaDetalle.cliente ?? "—"}</span></div>
+              <div><span className="text-content-muted">Cliente:</span> <span className="text-content ml-1">{ventaDetalle.cliente_nombre ?? ventaDetalle.cliente ?? "—"}</span></div>
               <div><span className="text-content-muted">Método:</span> <span className={`ml-1 ${metodoBadge(ventaDetalle.metodo_pago)}`}>{ventaDetalle.metodo_pago}</span></div>
               <div><span className="text-content-muted">Hora:</span> <span className="text-content ml-1">{formatHora(ventaDetalle.fecha_hora ?? ventaDetalle.hora ?? ventaDetalle.fecha)}</span></div>
               <div><span className="text-content-muted">Total:</span> <span className="text-brand-400 font-bold ml-1">{fmtMoney(ventaDetalle.total)}</span></div>
@@ -336,7 +336,7 @@ export default function VentasPage() {
                     <tr key={i} className="table-row">
                       <td className="td">{it.nombre ?? it.producto}</td>
                       <td className="td text-center">{it.cantidad}</td>
-                      <td className="td text-right text-brand-400">{fmtMoney(it.subtotal ?? (it.precio * it.cantidad))}</td>
+                      <td className="td text-right text-brand-400">{fmtMoney(it.subtotal ?? (it.precio_unitario * it.cantidad))}</td>
                     </tr>
                   ))}
                 </tbody>

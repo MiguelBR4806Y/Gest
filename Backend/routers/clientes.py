@@ -1,3 +1,5 @@
+import secrets
+import string
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy import func
 from Backend.db.database import get_db
@@ -6,6 +8,30 @@ from Backend.models.schema import ClienteCrear
 from Backend.routers.auth import verificar_token
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
+
+ALFANUM = string.ascii_uppercase + string.digits
+
+
+def generar_codigo(session):
+    for _ in range(100):
+        codigo = "".join(secrets.choice(ALFANUM) for _ in range(6))
+        existe = session.query(Cliente).filter(Cliente.codigo == codigo).first()
+        if not existe:
+            return codigo
+    raise HTTPException(status_code=500, detail="No se pudo generar un código único")
+
+
+def serializar(c, ultima=None):
+    return {
+        "id": c.id,
+        "codigo": c.codigo,
+        "nombre": c.nombre,
+        "telefono": c.telefono,
+        "credito_limite": c.credito_limite,
+        "credito_usado": c.credito_usado,
+        "creado_en": str(c.creado_en),
+        "ultima_compra": str(ultima) if ultima else "Sin compras",
+    }
 
 
 @router.get("/")
@@ -20,22 +46,16 @@ def listar_clientes(usuario_id: int = Depends(verificar_token)):
             ultima = session.query(func.max(Venta.fecha_hora)).filter(
                 Venta.cliente_id == c.id
             ).scalar()
-            result.append({
-                "id": c.id,
-                "nombre": c.nombre,
-                "telefono": c.telefono,
-                "credito_limite": c.credito_limite,
-                "credito_usado": c.credito_usado,
-                "creado_en": str(c.creado_en),
-                "ultima_compra": str(ultima) if ultima else "Sin compras",
-            })
+            result.append(serializar(c, ultima))
         return result
 
 
 @router.post("/")
 def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
+        codigo = generar_codigo(session)
         c = Cliente(
+            codigo=codigo,
             usuario_id=usuario_id,
             nombre=cliente.nombre,
             telefono=cliente.telefono,
@@ -43,7 +63,7 @@ def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_tok
         )
         session.add(c)
         session.flush()
-        return {"id": c.id, **cliente.model_dump(), "ultima_compra": "Sin compras"}
+        return serializar(c)
 
 
 @router.get("/{id}")
@@ -59,16 +79,7 @@ def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
         ultima = session.query(func.max(Venta.fecha_hora)).filter(
             Venta.cliente_id == c.id
         ).scalar()
-
-        return {
-            "id": c.id,
-            "nombre": c.nombre,
-            "telefono": c.telefono,
-            "credito_limite": c.credito_limite,
-            "credito_usado": c.credito_usado,
-            "creado_en": str(c.creado_en),
-            "ultima_compra": str(ultima) if ultima else "Sin compras",
-        }
+        return serializar(c, ultima)
 
 
 @router.put("/{id}")
@@ -95,16 +106,7 @@ def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(ver
         ultima = session.query(func.max(Venta.fecha_hora)).filter(
             Venta.cliente_id == id
         ).scalar()
-
-        return {
-            "id": c.id,
-            "nombre": c.nombre,
-            "telefono": c.telefono,
-            "credito_limite": c.credito_limite,
-            "credito_usado": c.credito_usado,
-            "creado_en": str(c.creado_en),
-            "ultima_compra": str(ultima) if ultima else "Sin compras",
-        }
+        return serializar(c, ultima)
 
 
 @router.delete("/{id}")

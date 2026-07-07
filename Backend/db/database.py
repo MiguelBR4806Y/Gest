@@ -1,9 +1,11 @@
 import os
+import secrets
+import string
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from Backend.db.models import Base, Usuario
+from Backend.db.models import Base, Usuario, Cliente
 
 load_dotenv()
 
@@ -43,7 +45,30 @@ def inicializar_db():
             except:
                 pass
 
+        session.execute(text(
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS zona_horaria VARCHAR DEFAULT 'America/Managua'"
+        ))
+
         root = session.query(Usuario).filter(Usuario.usuario == "root").first()
         if not root:
             root = Usuario(usuario="root", password="1234", nombre_negocio="Bravo's Gest")
             session.add(root)
+
+        ALFANUM = string.ascii_uppercase + string.digits
+
+        session.execute(text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS codigo VARCHAR(6) UNIQUE"
+        ))
+
+        clientes_sin_codigo = session.query(Cliente).filter(
+            Cliente.codigo.is_(None)
+        ).all()
+        for c in clientes_sin_codigo:
+            for _ in range(100):
+                codigo = "".join(secrets.choice(ALFANUM) for _ in range(6))
+                existe = session.query(Cliente).filter(
+                    Cliente.codigo == codigo
+                ).first()
+                if not existe:
+                    c.codigo = codigo
+                    break

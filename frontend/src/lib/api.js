@@ -1,4 +1,12 @@
-const BASE = "http://127.0.0.1:8000";
+const BASE = "";
+export const ZONAS = [
+  "America/Managua", "America/Mexico_City", "America/El_Salvador",
+  "America/Costa_Rica", "America/Guatemala", "America/Panama",
+  "America/Bogota", "America/Lima", "America/Santiago",
+  "America/Argentina/Buenos_Aires", "America/Sao_Paulo",
+  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "Europe/Madrid", "UTC",
+];
 
 function getToken() {
   return sessionStorage.getItem("token") ?? "";
@@ -38,7 +46,12 @@ export const api = {
   baseUrl: BASE,
 };
 
-export function formatHora(str) {
+function getZona() {
+  try { return sessionStorage.getItem("zona_horaria") || "America/Managua"; }
+  catch { return "America/Managua"; }
+}
+
+export function formatHora(str, zona) {
   if (!str) return "—";
   if (str.length === 5 && str.includes(":")) {
     const [h, m] = str.split(":").map(Number);
@@ -48,7 +61,10 @@ export function formatHora(str) {
   }
   const d = new Date(str);
   if (isNaN(d.getTime())) return str;
-  return d.toLocaleString("es-NI", { hour: "numeric", minute: "2-digit", hour12: true });
+  return d.toLocaleString("es-NI", {
+    hour: "numeric", minute: "2-digit", hour12: true,
+    timeZone: zona || getZona(),
+  });
 }
 
 export function fmtMoney(n) {

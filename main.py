@@ -42,6 +42,11 @@ DIST = "Frontend/dist"
 if os.path.isdir(f"{DIST}/assets"):
     app.mount("/assets", StaticFiles(directory=f"{DIST}/assets"), name="assets")
 
+# ── Health check (debe ir antes del catch-all) ──
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 # ── Servir la SPA (index.html para cualquier ruta no-API) ──
 @app.get("/")
 def home():
@@ -49,14 +54,7 @@ def home():
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
-    # Servir archivos estáticos si existen
     static_file = f"{DIST}/{full_path}"
     if os.path.isfile(static_file):
         return FileResponse(static_file)
-    # Fallback a index.html para client-side routing
     return FileResponse(f"{DIST}/index.html")
-
-# ── Health check ──
-@app.get("/health")
-def health():
-    return {"status": "ok"}

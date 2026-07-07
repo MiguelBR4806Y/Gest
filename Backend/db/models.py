@@ -20,6 +20,7 @@ class Usuario(Base):
     modo_factura = Column(String, default="basica")
     tasa_cambio = Column(Float, default=36.0)
     tasa_cambio_configurada = Column(Boolean, default=False)
+    zona_horaria = Column(String, default="America/Managua")
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
     productos = relationship("Producto", back_populates="usuario")
@@ -68,6 +69,7 @@ class Cliente(Base):
 
     id = Column(Integer, primary_key=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    codigo = Column(String(6), unique=True, nullable=False)
     nombre = Column(String, nullable=False)
     telefono = Column(String, nullable=True)
     credito_limite = Column(Float, default=0.0)

@@ -15,7 +15,7 @@ export default function ClientesPage() {
   const [comprasOpen, setComprasOpen] = useState(false);
 
   const [form, setForm]             = useState(EMPTY);
-  const [editForm, setEditForm]     = useState({ ...EMPTY, id: null, credito_usado: 0 });
+  const [editForm, setEditForm]     = useState({ ...EMPTY, id: null, codigo: "", credito_usado: 0 });
   const [compras, setCompras]       = useState([]);
   const [saving, setSaving]         = useState(false);
 
@@ -44,7 +44,7 @@ export default function ClientesPage() {
   }
 
   function abrirEditar(c) {
-    setEditForm({ id: c.id, nombre: c.nombre, telefono: c.telefono ?? "", credito_limite: c.credito_limite ?? 0, credito_usado: c.credito_usado ?? 0 });
+    setEditForm({ id: c.id, codigo: c.codigo, nombre: c.nombre, telefono: c.telefono ?? "", credito_limite: c.credito_limite ?? 0, credito_usado: c.credito_usado ?? 0 });
     setEditOpen(true);
   }
 
@@ -77,7 +77,8 @@ export default function ClientesPage() {
 
   const filtrados = clientes.filter(c =>
     c.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    (c.telefono ?? "").includes(search)
+    (c.telefono ?? "").includes(search) ||
+    (c.codigo ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   const totalClientes    = clientes.length;
@@ -151,6 +152,7 @@ export default function ClientesPage() {
               <thead>
                 <tr>
                   <th className="th">#</th>
+                  <th className="th">Código</th>
                   <th className="th">Nombre</th>
                   <th className="th hidden sm:table-cell">Teléfono</th>
                   <th className="th text-right">Crédito usado</th>
@@ -166,6 +168,7 @@ export default function ClientesPage() {
                   return (
                     <tr key={c.id} className="table-row">
                       <td className="td text-content-subtle">{i + 1}</td>
+                      <td className="td font-mono text-xs text-brand-400 font-semibold">{c.codigo}</td>
                       <td className="td font-medium text-content">{c.nombre}</td>
                       <td className="td hidden sm:table-cell text-content-muted">{c.telefono || "—"}</td>
                       <td className="td text-right">
@@ -223,6 +226,10 @@ export default function ClientesPage() {
       {/* Editar */}
       <Modal title="Editar cliente" open={editOpen} onClose={() => setEditOpen(false)} size="sm">
         <div className="space-y-4">
+          <div>
+            <label className="label">Código</label>
+            <div className="input font-mono text-brand-400 bg-surface-alt/50 select-all">{editForm.codigo}</div>
+          </div>
           <div>
             <label className="label">Nombre *</label>
             <input className="input" value={editForm.nombre} onChange={e => setEF("nombre", e.target.value)} />

@@ -16,6 +16,7 @@ export function AuthProvider({ children }) {
         nombre_negocio: sessionStorage.getItem("nombre_negocio"),
         tasa_cambio: Number(sessionStorage.getItem("tasa_cambio") || 36),
         tasa_cambio_configurada: sessionStorage.getItem("tasa_cambio_configurada") === "true",
+        zona_horaria: sessionStorage.getItem("zona_horaria") || "America/Managua",
       });
     }
     setLoading(false);
@@ -28,11 +29,13 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem("nombre_negocio", data.nombre_negocio);
     sessionStorage.setItem("tasa_cambio", String(data.tasa_cambio ?? 36));
     sessionStorage.setItem("tasa_cambio_configurada", String(data.tasa_cambio_configurada ?? false));
+    sessionStorage.setItem("zona_horaria", data.zona_horaria || "America/Managua");
     setUser({
       token: data.token, usuario: data.usuario,
       nombre_negocio: data.nombre_negocio,
       tasa_cambio: data.tasa_cambio ?? 36,
       tasa_cambio_configurada: data.tasa_cambio_configurada ?? false,
+      zona_horaria: data.zona_horaria || "America/Managua",
     });
     return data;
   }

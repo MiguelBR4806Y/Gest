@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/api";
+import { api, ZONAS } from "../lib/api";
 import { useTheme } from "../hooks/useTheme";
 import Modal from "./Modal";
 import {
@@ -25,13 +25,13 @@ export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileData, setProfileData] = useState({ nombre_negocio: "", color_acento: "#428dc7", tasa_cambio: 36.0 });
+  const [profileData, setProfileData] = useState({ nombre_negocio: "", color_acento: "#428dc7", tasa_cambio: 36.0, zona_horaria: "America/Managua" });
   const [saving, setSaving] = useState(false);
 
   async function openProfile() {
     try {
       const d = await api.get("/auth/perfil");
-      setProfileData({ nombre_negocio: d.nombre_negocio ?? "", color_acento: d.color_acento ?? "#428dc7", tasa_cambio: d.tasa_cambio ?? 36.0 });
+      setProfileData({ nombre_negocio: d.nombre_negocio ?? "", color_acento: d.color_acento ?? "#428dc7", tasa_cambio: d.tasa_cambio ?? 36.0, zona_horaria: d.zona_horaria || "America/Managua" });
       setProfileOpen(true);
     } catch { setProfileOpen(true); }
   }
@@ -42,7 +42,7 @@ export default function Layout({ children }) {
     try {
       await api.put("/auth/perfil", profileData);
       updateNegocio(profileData.nombre_negocio);
-      updateUser({ tasa_cambio: profileData.tasa_cambio, tasa_cambio_configurada: true });
+      updateUser({ tasa_cambio: profileData.tasa_cambio, tasa_cambio_configurada: true, zona_horaria: profileData.zona_horaria });
       setProfileOpen(false);
     } catch(e) { alert(e.message); }
     finally { setSaving(false); }
@@ -172,6 +172,13 @@ export default function Layout({ children }) {
             <input className="input" type="number" min="1" step="0.01" value={profileData.tasa_cambio}
               onChange={e => setProfileData(d => ({ ...d, tasa_cambio: Number(e.target.value) }))} />
             <p className="text-xs text-content-subtle mt-1">Usada para referencia en precios en dólares</p>
+          </div>
+          <div>
+            <label className="label">Zona horaria</label>
+            <select className="input" value={profileData.zona_horaria}
+              onChange={e => setProfileData(d => ({ ...d, zona_horaria: e.target.value }))}>
+              {ZONAS.map(z => <option key={z} value={z}>{z.replace(/_/g, " ").replace(/\//g, " / ")}</option>)}
+            </select>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button className="btn-secondary" onClick={() => setProfileOpen(false)}>Cancelar</button>

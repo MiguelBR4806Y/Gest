@@ -46,6 +46,7 @@ class ClienteCrear(BaseModel):
 
 class Cliente(ClienteCrear):
     id: int
+    codigo: str
     creado_en: datetime
 
     class Config:

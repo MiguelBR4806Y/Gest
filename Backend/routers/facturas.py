@@ -11,6 +11,7 @@ from sqlalchemy import text
 import os
 import re
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,17 +28,18 @@ def fmt(valor: float) -> str:
     return f"{valor:,.2f}"
 
 
-def fecha_a_nicaragua(fecha_hora) -> datetime:
+def a_zona(fecha_hora, zona="America/Managua") -> datetime:
+    tz = ZoneInfo(zona)
     if isinstance(fecha_hora, datetime):
-        return fecha_hora - timedelta(hours=6)
+        return fecha_hora.astimezone(tz)
     limpio = fecha_hora.replace("T", " ")
     dt = datetime.strptime(limpio[:19], "%Y-%m-%d %H:%M:%S")
-    return dt - timedelta(hours=6)
+    return dt.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz)
 
 
-def formatear_fecha_hora(fecha_hora_str: str) -> str:
-    dt_nica = fecha_a_nicaragua(fecha_hora_str)
-    return dt_nica.strftime("%d/%m/%Y %I:%M %p")
+def formatear_fecha_hora(fecha_hora_str: str, zona="America/Managua") -> str:
+    dt = a_zona(fecha_hora_str, zona)
+    return dt.strftime("%d/%m/%Y %I:%M %p")
 
 
 def sanitizar_nombre_carpeta(nombre: str) -> str:
@@ -66,16 +68,17 @@ def get_config_negocio(session, usuario: str) -> dict:
             "color_acento": u.color_acento or "#1D9E75",
             "logo_path": u.logo_path,
             "tasa_cambio": u.tasa_cambio or 36.0,
+            "zona_horaria": u.zona_horaria or "America/Managua",
         }
 
-    return {"nombre_negocio": NOMBRE_NEGOCIO, "color_acento": "#1D9E75", "logo_path": None, "tasa_cambio": 36.0}
+    return {"nombre_negocio": NOMBRE_NEGOCIO, "color_acento": "#1D9E75", "logo_path": None, "tasa_cambio": 36.0, "zona_horaria": "America/Managua"}
 
 
-def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, color_acento: str = None, logo_path: str = None, tasa_cambio: float = 36.0) -> str:
+def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, color_acento: str = None, logo_path: str = None, tasa_cambio: float = 36.0, zona_horaria: str = "America/Managua") -> str:
     nombre = nombre_negocio or NOMBRE_NEGOCIO
     color = color_acento or "#1D9E75"
 
-    fecha_nica = fecha_a_nicaragua(venta["fecha_hora"])
+    fecha_nica = a_zona(venta["fecha_hora"], zona_horaria)
     carpeta = carpeta_destino(nombre, fecha_nica)
     os.makedirs(carpeta, exist_ok=True)
 
@@ -94,7 +97,7 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
     elementos.append(Paragraph(f"<b>{nombre}</b>", styles["Title"]))
     elementos.append(Spacer(1, 0.2 * inch))
     elementos.append(Paragraph(f"<b>Factura #</b>{venta_id}", styles["Normal"]))
-    elementos.append(Paragraph(f"<b>Fecha:</b> {formatear_fecha_hora(venta['fecha_hora'])}", styles["Normal"]))
+    elementos.append(Paragraph(f"<b>Fecha:</b> {formatear_fecha_hora(venta['fecha_hora'], zona_horaria)}", styles["Normal"]))
     elementos.append(Paragraph(f"<b>Cliente:</b> {venta['cliente_nombre'] or 'Consumidor final'}", styles["Normal"]))
     elementos.append(Spacer(1, 0.3 * inch))
 
@@ -162,7 +165,7 @@ def previsualizar_factura(
         {"nombre": "PlayStation 5", "cantidad": 1, "precio_unitario": 20500.00}
     ]
 
-    path = generar_pdf("preview", venta_dict, items_list, nombre_negocio, color_acento, config["logo_path"], config["tasa_cambio"])
+    path = generar_pdf("preview", venta_dict, items_list, nombre_negocio, color_acento, config["logo_path"], config["tasa_cambio"], config["zona_horaria"])
     return FileResponse(path, media_type="application/pdf")
 
 
@@ -197,5 +200,5 @@ def obtener_factura(venta_id: int, usuario: str = Query(default="root")):
         venta_dict = dict(venta)
         items_list = [dict(i) for i in items]
 
-    path = generar_pdf(venta_id, venta_dict, items_list, config["nombre_negocio"], config["color_acento"], config["logo_path"], config["tasa_cambio"])
+    path = generar_pdf(venta_id, venta_dict, items_list, config["nombre_negocio"], config["color_acento"], config["logo_path"], config["tasa_cambio"], config["zona_horaria"])
     return FileResponse(path, media_type="application/pdf")

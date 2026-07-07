@@ -180,7 +180,8 @@ def obtener_venta(id: int, usuario_id: int = Depends(verificar_token)):
 
         items = session.execute(
             text("""
-                SELECT p.nombre, vi.cantidad, vi.precio_unitario
+                SELECT p.nombre, vi.cantidad, vi.precio_unitario,
+                       (vi.cantidad * vi.precio_unitario) AS subtotal
                 FROM venta_items vi
                 JOIN productos p ON vi.producto_id = p.id
                 WHERE vi.venta_id = :vid

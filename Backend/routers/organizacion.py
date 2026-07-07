@@ -5,7 +5,7 @@ from Backend.db.database import get_db
 from Backend.db.models import Usuario
 from Backend.routers.auth import verificar_token
 from Backend.routers.facturas import (
-    fecha_a_nicaragua, generar_pdf, get_config_negocio,
+    a_zona, generar_pdf, get_config_negocio,
     carpeta_destino, sanitizar_nombre_carpeta
 )
 from sqlalchemy import text
@@ -65,7 +65,7 @@ def ruta_jerarquica(fn: datetime) -> str:
 
 def obtener_o_generar_pdf(venta: dict, session, usuario_id: int, usuario: str) -> str:
     config = get_config_negocio(session, usuario)
-    fecha_nica = fecha_a_nicaragua(venta["fecha_hora"])
+    fecha_nica = a_zona(venta["fecha_hora"], config["zona_horaria"])
     carpeta = carpeta_destino(config["nombre_negocio"], fecha_nica)
     pdf_path = os.path.join(carpeta, f"factura_{venta['id']}.pdf")
 
@@ -84,7 +84,8 @@ def obtener_o_generar_pdf(venta: dict, session, usuario_id: int, usuario: str) -
 
     return generar_pdf(
         venta["id"], dict(venta), [dict(i) for i in items],
-        config["nombre_negocio"], config["color_acento"], config["logo_path"]
+        config["nombre_negocio"], config["color_acento"], config["logo_path"],
+        config["tasa_cambio"], config["zona_horaria"]
     )
 
 
@@ -355,6 +356,9 @@ def descargar(
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as session:
+        config = get_config_negocio(session, nombre_usuario)
+        zona_horaria = config["zona_horaria"]
+
         ventas = ventas_en_periodo(
             session, usuario_id, nivel, anio, semestre, trimestre,
             mes, semana, fecha, factura_id
@@ -374,10 +378,10 @@ def descargar(
                 {"vid": factura_id}
             ).mappings().fetchall()
 
-            config = get_config_negocio(session, nombre_usuario)
             pdf_path = generar_pdf(
                 factura_id, dict(ventas[0]), [dict(i) for i in items],
-                config["nombre_negocio"], config["color_acento"], config["logo_path"]
+                config["nombre_negocio"], config["color_acento"], config["logo_path"],
+                config["tasa_cambio"], zona_horaria
             )
             return FileResponse(
                 pdf_path, media_type="application/pdf",
@@ -388,7 +392,7 @@ def descargar(
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for v in ventas:
-                fn = fecha_a_nicaragua(v["fecha_hora"])
+                fn = a_zona(v["fecha_hora"], zona_horaria)
                 rel_path = ruta_jerarquica(fn)
                 pdf_path = obtener_o_generar_pdf(v, session, usuario_id, nombre_usuario)
                 arcname = f"{rel_path}/factura_{v['id']}.pdf"

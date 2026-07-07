@@ -37,6 +37,7 @@ class PerfilData(BaseModel):
     nombre_negocio: str
     color_acento: str = "#1D9E75"
     tasa_cambio: float = 36.0
+    zona_horaria: str = "America/Managua"
 
 
 def crear_token(usuario_id: int, usuario: str) -> str:
@@ -97,6 +98,7 @@ def login(datos: LoginData):
             "nombre_negocio": usuario.nombre_negocio,
             "tasa_cambio": usuario.tasa_cambio,
             "tasa_cambio_configurada": usuario.tasa_cambio_configurada,
+            "zona_horaria": usuario.zona_horaria,
         }
 
 
@@ -113,6 +115,7 @@ def obtener_perfil(usuario_id: int = Depends(verificar_token)):
             "modo_factura": u.modo_factura,
             "tasa_cambio": u.tasa_cambio,
             "tasa_cambio_configurada": u.tasa_cambio_configurada,
+            "zona_horaria": u.zona_horaria,
         }
 
 
@@ -124,6 +127,7 @@ def actualizar_perfil(datos: PerfilData, usuario_id: int = Depends(verificar_tok
             Usuario.color_acento: datos.color_acento,
             Usuario.tasa_cambio: datos.tasa_cambio,
             Usuario.tasa_cambio_configurada: True,
+            Usuario.zona_horaria: datos.zona_horaria,
         })
         return {"mensaje": "Perfil actualizado correctamente"}
 
