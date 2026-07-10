@@ -12,10 +12,22 @@ import secrets
 import httpx
 import os
 import shutil
+import bcrypt
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-SECRET_KEY = os.getenv("SECRET_KEY", "clave_secreta_por_defecto")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY no está configurada en el entorno")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -109,7 +121,7 @@ def registro(datos: RegistroData):
         codigo = generar_codigo() if datos.email else None
         usuario = Usuario(
             usuario=datos.usuario,
-            password=datos.password,
+            password=hash_password(datos.password),
             email=datos.email,
             nombre_negocio=datos.nombre_negocio,
             tasa_cambio=datos.tasa_cambio,
@@ -129,11 +141,10 @@ def registro(datos: RegistroData):
 def login(datos: LoginData):
     with get_db() as session:
         usuario = session.query(Usuario).filter(
-            Usuario.usuario == datos.usuario,
-            Usuario.password == datos.password
+            Usuario.usuario == datos.usuario
         ).first()
 
-        if not usuario:
+        if not usuario or not usuario.password or not verify_password(datos.password, usuario.password):
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
         return usuario_a_respuesta(usuario)
@@ -263,9 +274,9 @@ def cambiar_password(datos: CambioPasswordData, usuario_id: int = Depends(verifi
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         if u.password is None:
             raise HTTPException(status_code=400, detail="No puedes cambiar la contraseña de una cuenta de Google")
-        if u.password != datos.password_actual:
+        if not verify_password(datos.password_actual, u.password):
             raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
-        u.password = datos.password_nuevo
+        u.password = hash_password(datos.password_nuevo)
         return {"mensaje": "Contraseña actualizada correctamente"}
 
 
@@ -313,7 +324,7 @@ def eliminar_cuenta(datos: EliminarCuentaData, usuario_id: int = Depends(verific
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
-        if u.password is not None and u.password != datos.password:
+        if u.password is not None and not verify_password(datos.password, u.password):
             raise HTTPException(status_code=400, detail="Contraseña incorrecta")
 
         session.query(ChatMensaje).filter(ChatMensaje.usuario_id == usuario_id).delete()

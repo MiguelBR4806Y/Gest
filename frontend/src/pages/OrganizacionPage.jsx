@@ -43,6 +43,27 @@ export default function OrganizacionPage() {
   const [vistaFacturas, setVistaFacturas] = useState(false);
   const [tituloFacturas, setTituloFacturas] = useState("");
 
+  function getToken() {
+    return sessionStorage.getItem("token") ?? "";
+  }
+
+  async function abrirPDF(url) {
+    const res = await fetch(url, { headers: { Authorization: "Bearer " + getToken() } });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  }
+
+  async function descargarPDF(url) {
+    const res = await fetch(url, { headers: { Authorization: "Bearer " + getToken() } });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "factura.pdf";
+    a.click();
+  }
+
   const cargar = useCallback(async () => {
     setLoading(true);
     setItems([]);
@@ -222,16 +243,14 @@ export default function OrganizacionPage() {
                       <td className="td hidden sm:table-cell"><span className="badge-blue">{f.metodo_pago}</span></td>
                       <td className="td">
                         <div className="flex items-center justify-end gap-1">
-                          <a href={`${api.baseUrl}/facturas/${f.id}?usuario=${user?.usuario ?? "root"}`}
-                            target="_blank" rel="noreferrer"
+                          <button onClick={() => abrirPDF(`${api.baseUrl}/facturas/${f.id}`)}
                             className="btn-ghost p-1.5 text-brand-400 hover:text-brand-300" title="Ver factura">
                             <Eye size={14} />
-                          </a>
-                          <a href={`${api.baseUrl}/organizacion/descargar?nivel=factura&factura_id=${f.id}&usuario=${user?.usuario ?? "root"}`}
-                            target="_blank" rel="noreferrer"
+                          </button>
+                          <button onClick={() => descargarPDF(`${api.baseUrl}/organizacion/descargar?nivel=factura&factura_id=${f.id}`)}
                             className="btn-ghost p-1.5 text-secondary-400 hover:text-secondary-300" title="Descargar">
                             <Download size={14} />
-                          </a>
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import FileResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -7,6 +7,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from Backend.db.database import get_db
 from Backend.db.models import Usuario
+from Backend.routers.auth import verificar_token
 from sqlalchemy import text
 import os
 import re
@@ -59,8 +60,8 @@ def carpeta_destino(nombre_negocio: str, fecha_nica: datetime) -> str:
     return os.path.join(FACTURAS_DIR, nombre_negocio_seguro, nombre_semana, nombre_dia)
 
 
-def get_config_negocio(session, usuario: str) -> dict:
-    u = session.query(Usuario).filter(Usuario.usuario == usuario).first()
+def get_config_negocio(session, usuario_id: int) -> dict:
+    u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
 
     if u:
         return {
@@ -151,10 +152,10 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
 def previsualizar_factura(
     nombre_negocio: str = Query(default="Mi Negocio"),
     color_acento: str = Query(default="#1D9E75"),
-    usuario: str = Query(default="root"),
+    usuario_id: int = Depends(verificar_token),
 ):
     with get_db() as session:
-        config = get_config_negocio(session, usuario)
+        config = get_config_negocio(session, usuario_id)
 
     venta_dict = {
         "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -170,18 +171,18 @@ def previsualizar_factura(
 
 
 @router.get("/{venta_id}")
-def obtener_factura(venta_id: int, usuario: str = Query(default="root")):
+def obtener_factura(venta_id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        config = get_config_negocio(session, usuario)
+        config = get_config_negocio(session, usuario_id)
 
         venta = session.execute(
             text("""
                 SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
                 FROM ventas v
                 LEFT JOIN clientes c ON v.cliente_id = c.id
-                WHERE v.id = :vid
+                WHERE v.id = :vid AND v.usuario_id = :uid
             """),
-            {"vid": venta_id}
+            {"vid": venta_id, "uid": usuario_id}
         ).mappings().first()
 
         if not venta:

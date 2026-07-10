@@ -103,11 +103,8 @@ export default function LoginPage() {
         {dark ? <Sun size={18} /> : <Moon size={18} />}
       </button>
 
-      <div className="hidden lg:flex flex-col flex-1 relative overflow-hidden px-16 py-14 justify-between">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-brand-500/5 blur-3xl" />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-secondary-500/5 blur-3xl" />
-
-        <div className="relative">
+      <div className="hidden lg:flex flex-col flex-1 px-16 py-14 justify-between">
+        <div>
           <div className="flex items-center gap-3 mb-16">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500 to-secondary-500 flex items-center justify-center font-bold text-white shadow-glow-sm">BG</div>
             <span className="text-xl font-bold text-content">Bravo's Gest</span>
@@ -132,7 +129,7 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-        <p className="text-xs text-content-subtle relative">© 2026 Bravo's Gest. Todos los derechos reservados.</p>
+        <p className="text-xs text-content-subtle">© 2026 Bravo's Gest. Todos los derechos reservados.</p>
       </div>
 
       <div className="flex flex-col items-center justify-center w-full lg:w-[420px] shrink-0 px-8 py-12 relative">

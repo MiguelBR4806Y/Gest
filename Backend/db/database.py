@@ -1,6 +1,7 @@
 import os
 import secrets
 import string
+import bcrypt
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -60,7 +61,8 @@ def inicializar_db():
 
         root = session.query(Usuario).filter(Usuario.usuario == "root").first()
         if not root:
-            root = Usuario(usuario="root", password="1234", nombre_negocio="Bravo's Gest")
+            hashed = bcrypt.hashpw("1234".encode(), bcrypt.gensalt()).decode()
+            root = Usuario(usuario="root", password=hashed, nombre_negocio="Bravo's Gest")
             session.add(root)
 
         ALFANUM = string.ascii_uppercase + string.digits

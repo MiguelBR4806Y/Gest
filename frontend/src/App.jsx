@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
+import AuroraBackground from "./components/AuroraBackground";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import InventarioPage from "./pages/InventarioPage";
@@ -48,7 +49,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <AuroraBackground>
+        <AppRoutes />
+      </AuroraBackground>
     </AuthProvider>
   );
 }

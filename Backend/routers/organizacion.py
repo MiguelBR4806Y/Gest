@@ -63,8 +63,8 @@ def ruta_jerarquica(fn: datetime) -> str:
             f"/{DIAS_SEMANA[fn.weekday()]}")
 
 
-def obtener_o_generar_pdf(venta: dict, session, usuario_id: int, usuario: str) -> str:
-    config = get_config_negocio(session, usuario)
+def obtener_o_generar_pdf(venta: dict, session, usuario_id: int) -> str:
+    config = get_config_negocio(session, usuario_id)
     fecha_nica = a_zona(venta["fecha_hora"], config["zona_horaria"])
     carpeta = carpeta_destino(config["nombre_negocio"], fecha_nica)
     pdf_path = os.path.join(carpeta, f"factura_{venta['id']}.pdf")
@@ -331,32 +331,18 @@ def descargar(
     semana: str = Query(default=None),
     fecha: str = Query(default=None),
     factura_id: int = Query(default=None),
-    usuario: str = Query(default=None),
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    usuario_id = None
-    nombre_usuario = usuario or "root"
-
-    if credentials:
-        try:
-            payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-            usuario_id = int(payload.get("sub"))
-            nombre_usuario = payload.get("usuario", nombre_usuario)
-        except JWTError:
-            pass
-
-    if usuario_id is None and usuario:
-        with get_db() as session:
-            u = session.query(Usuario).filter(Usuario.usuario == usuario).first()
-            if u:
-                usuario_id = u.id
-                nombre_usuario = u.usuario
-
-    if usuario_id is None:
+    if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        usuario_id = int(payload.get("sub"))
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token inválido")
 
     with get_db() as session:
-        config = get_config_negocio(session, nombre_usuario)
+        config = get_config_negocio(session, usuario_id)
         zona_horaria = config["zona_horaria"]
 
         ventas = ventas_en_periodo(
@@ -394,7 +380,7 @@ def descargar(
             for v in ventas:
                 fn = a_zona(v["fecha_hora"], zona_horaria)
                 rel_path = ruta_jerarquica(fn)
-                pdf_path = obtener_o_generar_pdf(v, session, usuario_id, nombre_usuario)
+                pdf_path = obtener_o_generar_pdf(v, session, usuario_id)
                 arcname = f"{rel_path}/factura_{v['id']}.pdf"
                 zf.write(pdf_path, arcname)
 

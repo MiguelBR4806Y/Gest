@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+.git/
+.gitignore
+README.md
+node_modules/
+.vite/
+Frontend/node_modules/
+Frontend/src/
+Frontend/public/
+.venv/
