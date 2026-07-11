@@ -248,38 +248,38 @@
   }
 
   .aurora-blob-1 {
-    width: 720px;
-    height: 720px;
+    width: clamp(240px, 45vw, 720px);
+    height: clamp(240px, 45vw, 720px);
     animation: aurora-drift-1 28s ease-in-out infinite;
   }
 
   .aurora-blob-2 {
-    width: 620px;
-    height: 620px;
+    width: clamp(200px, 38vw, 620px);
+    height: clamp(200px, 38vw, 620px);
     animation: aurora-drift-2 24s ease-in-out infinite;
   }
 
   .aurora-blob-3 {
-    width: 520px;
-    height: 520px;
+    width: clamp(180px, 32vw, 520px);
+    height: clamp(180px, 32vw, 520px);
     animation: aurora-drift-3 34s ease-in-out infinite;
   }
 
   .aurora-blob-4 {
-    width: 480px;
-    height: 480px;
+    width: clamp(160px, 30vw, 480px);
+    height: clamp(160px, 30vw, 480px);
     animation: aurora-drift-4 26s ease-in-out infinite;
   }
 
   .aurora-blob-5 {
-    width: 400px;
-    height: 400px;
+    width: clamp(140px, 25vw, 400px);
+    height: clamp(140px, 25vw, 400px);
     animation: aurora-drift-5 32s ease-in-out infinite;
   }
 
   .aurora-blob-6 {
-    width: 380px;
-    height: 380px;
+    width: clamp(120px, 22vw, 380px);
+    height: clamp(120px, 22vw, 380px);
     animation: aurora-drift-6 22s ease-in-out infinite;
   }
 

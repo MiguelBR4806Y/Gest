@@ -20,12 +20,12 @@ const DARK_BLOBS = [
 ];
 
 const BLOB_CLASSES = [
-  "aurora-blob aurora-blob-1 -top-[15%] -left-[10%]",
-  "aurora-blob aurora-blob-2 -top-[10%] -right-[15%]",
-  "aurora-blob aurora-blob-3 -bottom-[20%] left-[20%]",
-  "aurora-blob aurora-blob-4 bottom-[10%] -right-[5%]",
-  "aurora-blob aurora-blob-5 top-[40%] -left-[5%]",
-  "aurora-blob aurora-blob-6 top-[5%] left-[40%]",
+  "aurora-blob aurora-blob-1 -top-[20%] max-lg:-top-[12%] -left-[20%] max-lg:-left-[30%]",
+  "aurora-blob aurora-blob-2 -top-[15%] max-lg:-top-[8%] -right-[20%] max-lg:-right-[25%]",
+  "aurora-blob aurora-blob-3 -bottom-[25%] max-lg:-bottom-[15%] left-[15%] max-lg:left-[10%]",
+  "aurora-blob aurora-blob-4 bottom-[5%] max-lg:bottom-[0%] -right-[10%] max-lg:-right-[20%]",
+  "aurora-blob aurora-blob-5 top-[35%] max-lg:top-[30%] -left-[10%] max-lg:-left-[20%]",
+  "aurora-blob aurora-blob-6 top-[10%] max-lg:top-[2%] left-[35%] max-lg:left-[30%]",
 ];
 
 export default function AuroraBackground({ children, className = "" }) {
