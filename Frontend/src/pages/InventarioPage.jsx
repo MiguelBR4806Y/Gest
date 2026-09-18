@@ -7,6 +7,12 @@ import { useToast } from "../context/ToastContext";
 
 const EMPTY_FORM = { nombre: "", categoria: "", stock: 0, stock_minimo: 5, precio: 0, precio_dolar: 0, promocion_id: null };
 
+const labelPromo = (promo) => {
+  if (!promo) return null;
+  const map = { porcentaje: `${promo.valor}%`, "2x1": "2x1", monto_fijo: `C$${promo.valor}` };
+  return map[promo.tipo] ?? "";
+};
+
 export default function InventarioPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -130,12 +136,6 @@ export default function InventarioPage() {
   );
 
   const stockBajo = productos.filter(p => p.stock <= p.stock_minimo).length;
-
-  function labelPromo(promo) {
-    if (!promo) return null;
-    const map = { porcentaje: `${promo.valor}%`, "2x1": "2x1", monto_fijo: `C$${promo.valor}` };
-    return map[promo.tipo] ?? "";
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -346,7 +346,7 @@ export default function InventarioPage() {
             </tr></thead>
             <tbody>
               {historial.map((h, i) => (
-                <tr key={i} className="table-row">
+                <tr key={h.id || i} className="table-row">
                   <td className="td">
                     <span className={h.tipo === "entrada" ? "badge-green" : "badge-red"}>{h.tipo}</span>
                   </td>

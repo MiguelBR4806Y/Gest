@@ -106,7 +106,7 @@ export default function GestiPage() {
             {chat.length > 0 && (
               <div ref={chatRef} className="bg-surface rounded-2xl p-4 mb-4 space-y-3 max-h-96 overflow-y-auto border border-border/40">
                 {chat.map((m, i) => (
-                  <div key={i} className={`flex gap-2.5 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+                  <div key={m.id || i} className={`flex gap-2.5 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
                     <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold ${
                       m.role === "user" ? "bg-gradient-to-br from-brand-500 to-secondary-500 text-white" : "bg-surface-elevated text-content-muted"
                     }`}>
@@ -124,7 +124,7 @@ export default function GestiPage() {
                     <div className="w-8 h-8 rounded-full bg-surface-elevated flex items-center justify-center text-xs text-content-muted">Gesti</div>
                     <div className="bg-surface-elevated/60 px-4 py-3 rounded-2xl">
                       <div className="flex gap-1.5">
-                        {[0,1,2].map(i => <div key={i} className="w-2 h-2 bg-content-muted/40 rounded-full animate-bounce" style={{ animationDelay: `${i*150}ms` }} />)}
+                        {[0,1,2].map(i => <div key={`dot-${i}`} className="w-2 h-2 bg-content-muted/40 rounded-full animate-bounce" style={{ animationDelay: `${i*150}ms` }} />)}
                       </div>
                     </div>
                   </div>
@@ -178,7 +178,7 @@ export default function GestiPage() {
                   <p className="text-xs font-semibold text-content-muted uppercase tracking-wider mb-2">Reabastecer pronto</p>
                   {predictivos.reabastecer?.length > 0
                     ? predictivos.reabastecer.map((p, i) => (
-                        <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
+                        <div key={p.id || i} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
                           <span className="text-sm text-content truncate">{p.nombre}</span>
                           <span className="badge-red ml-2 shrink-0">{p.dias_restantes}d</span>
                         </div>

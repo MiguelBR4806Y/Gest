@@ -269,7 +269,7 @@ export default function ClientesPage() {
             </tr></thead>
             <tbody>
               {compras.map((c, i) => (
-                <tr key={i} className="table-row">
+                <tr key={c.id || i} className="table-row">
                   <td className="td text-right font-medium text-brand-400">{fmtMoney(c.total)}</td>
                   <td className="td"><span className="badge-blue">{c.metodo_pago}</span></td>
                   <td className="td text-right text-content-muted text-xs">{formatHora(c.fecha_hora ?? c.fecha)}</td>

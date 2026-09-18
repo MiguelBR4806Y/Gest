@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useReducer } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -30,6 +30,13 @@ export default function Layout({ children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState({ nombre_negocio: "", email: "", color_acento: "#428dc7", tasa_cambio: 36.0, zona_horaria: "America/Managua" });
+  const profileDataMemo = useMemo(() => ({
+    nombre_negocio: profileData.nombre_negocio,
+    email: profileData.email,
+    color_acento: profileData.color_acento,
+    tasa_cambio: profileData.tasa_cambio,
+    zona_horaria: profileData.zona_horaria,
+  }), [profileData]);
   const [saving, setSaving] = useState(false);
   const [dismissEmailAlert, setDismissEmailAlert] = useState(() => sessionStorage.getItem("dismissEmailAlert") === "true");
   const [showSecurity, setShowSecurity] = useState(false);
@@ -89,6 +96,7 @@ export default function Layout({ children }) {
   }
 
   async function resendOtp() {
+    if (otpLoading) return;
     try {
       const res = await api.post("/auth/enviar-verificacion");
       toast(res.mensaje);
@@ -120,9 +128,9 @@ export default function Layout({ children }) {
     finally { setSaving(false); }
   }
 
-  async function changePassword() {
+async function changePassword() {
+    if (changingPassword) return;
     if (!passwordData.password_actual || !passwordData.password_nuevo) return;
-    setChangingPassword(true);
     try {
       await api.put("/auth/password", passwordData);
       toast("Contraseña actualizada correctamente");
@@ -133,9 +141,8 @@ export default function Layout({ children }) {
     finally { setChangingPassword(false); }
   }
 
-  async function deleteAccount() {
-    if (!user?.provider && !deletePassword) return;
-    setDeleting(true);
+async function deleteAccount() {
+    if (deleting || !user?.provider && !deletePassword) return;
     try {
       await api.delete("/auth/cuenta", { password: deletePassword || "" });
       toast("Cuenta eliminada");
@@ -153,10 +160,13 @@ export default function Layout({ children }) {
   function toggleSidebarCollapse() {
     setSidebarCollapsed(p => {
       const next = !p;
-      localStorage.setItem("sidebarCollapsed", next);
       return next;
     });
   }
+
+  useEffect(() => {
+    localStorage.setItem("sidebarCollapsed", sidebarCollapsed);
+  }, [sidebarCollapsed]);
 
   const sidebar = (
     <div className="flex flex-col h-full bg-surface-card border-r border-border">
@@ -171,6 +181,7 @@ export default function Layout({ children }) {
           </div>
         )}
         <button onClick={toggleSidebarCollapse}
+          onKeyDown={e => e.key === "Escape" && setSidebarOpen(false)}
           className="shrink-0 text-content-muted hover:text-content transition-colors p-1 rounded-lg hover:bg-surface-hover hidden lg:block">
           {sidebarCollapsed ? <Menu size={16} /> : <ChevronLeft size={16} />}
         </button>
@@ -181,7 +192,7 @@ export default function Layout({ children }) {
           <NavLink key={to} to={to}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center ${sidebarCollapsed ? 'justify-center px-0 mx-auto w-10' : 'gap-3 px-3.5'} py-2.5 rounded-2xl text-sm font-medium transition-all duration-200 group ` +
+              `flex items-center ${sidebarCollapsed ? 'justify-center px-0 mx-auto w-10' : 'gap-3 px-3.5'} py-2.5 rounded-2xl text-sm font-medium transition-property duration-200 group ` +
               (isActive
                 ? "bg-brand-500/[0.08] text-brand-500 dark:text-brand-400 font-semibold"
                 : "text-content-muted hover:text-content hover:bg-surface-hover hover:scale-[1.02]")
@@ -189,7 +200,7 @@ export default function Layout({ children }) {
           >
             <Icon size={18} className="shrink-0" />
             {!sidebarCollapsed && <span>{label}</span>}
-            {!sidebarCollapsed && <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-40 transition-all duration-200 -translate-x-2 group-hover:translate-x-0" />}
+            {!sidebarCollapsed && <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-40 transition-property duration-200 -translate-x-2 group-hover:translate-x-0" />}
           </NavLink>
         ))}
       </nav>
@@ -197,19 +208,19 @@ export default function Layout({ children }) {
       {/* Theme toggle + bottom */}
       <div className={`px-3 py-4 border-t border-border ${sidebarCollapsed ? 'flex flex-col items-center' : 'space-y-1'}`}>
         <button onClick={cycleTheme}
-          className={`flex items-center rounded-2xl text-sm font-medium transition-all duration-200 w-full ${sidebarCollapsed ? 'justify-center px-0 py-2.5 w-10 text-content-muted hover:text-content hover:bg-surface-hover' : 'gap-3 px-3.5 py-2.5 text-content-muted hover:text-content hover:bg-surface-hover'}`}
+          className={`flex items-center rounded-2xl text-sm font-medium transition-property duration-200 w-full ${sidebarCollapsed ? 'justify-center px-0 py-2.5 w-10 text-content-muted hover:text-content hover:bg-surface-hover' : 'gap-3 px-3.5 py-2.5 text-content-muted hover:text-content hover:bg-surface-hover'}`}
           title={theme === "system" ? "Tema del sistema" : theme === "dark" ? "Modo oscuro" : "Modo claro"}>
           {theme === "system" ? <Monitor size={18} /> : dark ? <Sun size={18} /> : <Moon size={18} />}
           {!sidebarCollapsed && (theme === "system" ? "Tema sistema" : dark ? "Modo claro" : "Modo oscuro")}
         </button>
         <button onClick={() => openProfile()}
-          className={`flex items-center rounded-2xl text-sm font-medium transition-all duration-200 w-full ${sidebarCollapsed ? 'justify-center px-0 py-2.5 w-10 text-content-muted hover:text-content hover:bg-surface-hover' : 'gap-3 px-3.5 py-2.5 text-content-muted hover:text-content hover:bg-surface-hover'}`}
+          className={`flex items-center rounded-2xl text-sm font-medium transition-property duration-200 w-full ${sidebarCollapsed ? 'justify-center px-0 py-2.5 w-10 text-content-muted hover:text-content hover:bg-surface-hover' : 'gap-3 px-3.5 py-2.5 text-content-muted hover:text-content hover:bg-surface-hover'}`}
           title="Configuración">
           <Settings size={18} />
           {!sidebarCollapsed && "Configuración"}
         </button>
         <button onClick={handleLogout}
-          className={`flex items-center rounded-2xl text-sm font-medium transition-all duration-200 w-full ${sidebarCollapsed ? 'justify-center px-0 py-2.5 w-10 text-red-400 hover:text-red-300 hover:bg-red-900/15' : 'gap-3 px-3.5 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-900/15'}`}
+          className={`flex items-center rounded-2xl text-sm font-medium transition-property duration-200 w-full ${sidebarCollapsed ? 'justify-center px-0 py-2.5 w-10 text-red-400 hover:text-red-300 hover:bg-red-900/15' : 'gap-3 px-3.5 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-900/15'}`}
           title="Cerrar sesión">
           <LogOut size={18} />
           {!sidebarCollapsed && "Cerrar sesión"}
@@ -220,13 +231,13 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex h-screen bg-surface overflow-hidden">
-      <aside className={`hidden lg:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} shrink-0 transition-all duration-200`}>{sidebar}</aside>
+      <aside className={`hidden lg:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} shrink-0 transition-property duration-200`}>{sidebar}</aside>
 
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} onKeyDown={e => e.key === "Escape" && setSidebarOpen(false)} />
           <aside className="relative w-72 bg-surface-card z-50 flex flex-col animate-slide-up">
-            <button onClick={() => setSidebarOpen(false)} className="absolute top-4 right-4 text-content-muted hover:text-content transition-colors">
+            <button onClick={() => setSidebarOpen(false)} className="absolute top-4 right-4 text-content-muted hover:text-content transition-colors" title="Cerrar sidebar">
               <X size={20} />
             </button>
             {sidebar}
@@ -236,10 +247,10 @@ export default function Layout({ children }) {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="flex items-center gap-3 px-4 py-3 bg-surface-card border-b border-border">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-content-muted hover:text-content transition-colors">
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-content-muted hover:text-content transition-colors" title="Abrir sidebar">
             <Menu size={22} />
           </button>
-          <button onClick={toggleSidebarCollapse} className="hidden lg:block text-content-muted hover:text-content transition-colors">
+          <button onClick={toggleSidebarCollapse} className="hidden lg:block text-content-muted hover:text-content transition-colors" title="Alternar sidebar">
             <Menu size={20} />
           </button>
           <span className="text-sm font-semibold text-content">{user?.nombre_negocio || "Bravo's Gest"}</span>
@@ -298,11 +309,12 @@ export default function Layout({ children }) {
           <p className="text-sm text-content-muted">
             Hemos enviado un código de 6 dígitos a <strong className="text-content">{user?.email}</strong>
           </p>
-          <div>
-            <input className="input text-center text-2xl tracking-[8px] font-mono max-w-[200px] mx-auto"
-              type="text" maxLength={6} placeholder="000000"
-              value={otpCodigo}
-              onChange={e => setOtpCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+<div>
+              <label className="label">Código OTP</label>
+              <input className="input text-center text-2xl tracking-[8px] font-mono max-w-[200px] mx-auto"
+                type="text" maxLength={6} placeholder="000000"
+                value={otpCodigo}
+                onChange={e => setOtpCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))} />
           </div>
           <button className="btn-primary w-full" onClick={verifyOtp} disabled={otpLoading || otpCodigo.length !== 6}>
             {otpLoading ? "Verificando..." : "Verificar código"}
@@ -384,6 +396,7 @@ export default function Layout({ children }) {
                 <div className="space-y-3">
                   <p className="text-sm text-content-muted">¿Estás seguro de que deseas cambiar tu correo?</p>
                   <div className="flex gap-2">
+                    <label className="label">Nuevo correo electrónico</label>
                     <input className="input flex-1" type="email" placeholder="Nuevo correo electrónico"
                       value={nuevoEmail}
                       onChange={e => setNuevoEmail(e.target.value)} />

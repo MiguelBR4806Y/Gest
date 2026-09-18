@@ -31,6 +31,8 @@ function PeriodCard({ label, ventas, ingresos, onClick, disabled }) {
   );
 }
 
+const getToken = () => sessionStorage.getItem("token") ?? "";
+
 export default function OrganizacionPage() {
   const { user } = useAuth();
 

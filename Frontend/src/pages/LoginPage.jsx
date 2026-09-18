@@ -17,11 +17,14 @@ export default function LoginPage() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     localStorage.setItem("theme", dark ? "dark" : "light");
+    return () => document.documentElement.classList.remove("dark");
   }, [dark]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
     const checkGoogle = () => {
+      if (cancelled) return;
       if (window.google?.accounts?.id) {
         setGoogleReady(true);
       } else {
@@ -29,6 +32,7 @@ export default function LoginPage() {
       }
     };
     checkGoogle();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -44,7 +48,15 @@ export default function LoginPage() {
       shape: "rectangular",
       width: googleBtnRef.current.offsetWidth || 320,
     });
-  }, [googleReady]);
+    return () => {
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+      });
+    };
+  }, [googleReady, googleBtnRef]);
 
   async function handleGoogleResponse(response) {
     setLoading(true);

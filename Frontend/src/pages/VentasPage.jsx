@@ -40,7 +40,7 @@ export default function VentasPage() {
     finally { setLoading(false); }
   }, [fecha]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargar(); return () => {}; }, [cargar]);
 
   async function abrirNueva() {
     const [c, p] = await Promise.all([
@@ -269,7 +269,7 @@ export default function VentasPage() {
                 </tr></thead>
                 <tbody>
                   {items.map((it, i) => (
-                    <tr key={i} className="table-row">
+                    <tr key={it.id || i} className="table-row">
                       <td className="td">
                         <div className="flex items-center gap-1.5">
                           {it.nombre}
@@ -335,7 +335,7 @@ export default function VentasPage() {
                 </tr></thead>
                 <tbody>
                   {ventaDetalle.items.map((it, i) => (
-                    <tr key={i} className="table-row">
+                    <tr key={it.id || i} className="table-row">
                       <td className="td">{it.nombre ?? it.producto}</td>
                       <td className="td text-center">{it.cantidad}</td>
                       <td className="td text-right text-brand-400">{fmtMoney(it.subtotal ?? (it.precio_unitario * it.cantidad))}</td>

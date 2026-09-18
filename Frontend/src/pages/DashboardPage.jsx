@@ -172,7 +172,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {ultimasVentas.map((v, i) => (
-                    <tr key={i} className="table-row">
+                    <tr key={v.id || i} className="table-row">
                       <td className="td">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
                       <td className="td text-content-muted">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
                       <td className="td text-right font-medium text-brand-400">{fmtMoney(v.total)}</td>
@@ -190,7 +190,7 @@ export default function DashboardPage() {
             ? <p className="text-sm text-content-subtle px-5 py-6">Sin productos críticos.</p>
             : <div className="divide-y divide-border/40">
                 {stockBajo.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between px-5 py-3.5 hover:bg-surface-hover transition-colors">
+                  <div key={p.id || i} className="flex items-center justify-between px-5 py-3.5 hover:bg-surface-hover transition-colors">
                     <span className="text-sm text-content truncate">{p.nombre}</span>
                     <div className="flex items-center gap-2 shrink-0 ml-3">
                       <span className="badge-red">{p.stock} u.</span>
