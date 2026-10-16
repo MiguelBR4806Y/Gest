@@ -2,10 +2,23 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import joinedload
 from Backend.db.database import get_db
 from Backend.db.models import Producto, Movimiento, Promocion, Usuario
-from Backend.models.schema import ProductoCrear, RecargaInventario
+from Backend.models.schema import MovimientoCrear, ProductoCrear, RecargaInventario
 from Backend.routers.auth import verificar_token
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
+
+
+def _validar_promocion(session, promocion_id, usuario_id):
+    """Evita que un usuario enganche a su producto una promoción de otra cuenta."""
+    if promocion_id is None:
+        return None
+    promo = session.query(Promocion).filter(
+        Promocion.id == promocion_id,
+        Promocion.usuario_id == usuario_id
+    ).first()
+    if not promo:
+        raise HTTPException(status_code=400, detail="Promoción no encontrada")
+    return promo.id
 
 
 def _serializar(p, tasa=None):
@@ -59,7 +72,7 @@ def crear_producto(producto: ProductoCrear, usuario_id: int = Depends(verificar_
             stock_minimo=producto.stock_minimo,
             precio=producto.precio,
             precio_dolar=pd,
-            promocion_id=producto.promocion_id,
+            promocion_id=_validar_promocion(session, producto.promocion_id, usuario_id),
         )
         session.add(p)
         session.flush()
@@ -99,9 +112,18 @@ def obtener_producto(id: int, usuario_id: int = Depends(verificar_token)):
 @router.put("/{id}")
 def editar_producto(id: int, producto: ProductoCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
+        existe = session.query(Producto).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
+        ).first()
+        if not existe:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         tasa = u.tasa_cambio if u else 36.0
         pd = producto.precio_dolar if producto.precio_dolar is not None else round(producto.precio / tasa, 2) if tasa else 0
+        promocion_id = _validar_promocion(session, producto.promocion_id, usuario_id)
+
         session.query(Producto).filter(
             Producto.id == id,
             Producto.usuario_id == usuario_id
@@ -112,27 +134,37 @@ def editar_producto(id: int, producto: ProductoCrear, usuario_id: int = Depends(
             Producto.stock_minimo: producto.stock_minimo,
             Producto.precio: producto.precio,
             Producto.precio_dolar: pd,
-            Producto.promocion_id: producto.promocion_id,
+            Producto.promocion_id: promocion_id,
         })
-        return {"id": id, **producto.model_dump()}
+        return {"id": id, **producto.model_dump(), "promocion_id": promocion_id}
 
 
 @router.delete("/{id}")
 def eliminar_producto(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        session.query(Movimiento).filter(Movimiento.producto_id == id).delete()
-        session.query(Producto).filter(
+        # El producto debe pertenecer al usuario antes de tocar nada relacionado.
+        p = session.query(Producto).filter(
             Producto.id == id,
             Producto.usuario_id == usuario_id
-        ).delete()
+        ).first()
+        if not p:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        session.query(Movimiento).filter(Movimiento.producto_id == p.id).delete()
+        session.query(Producto).filter(Producto.id == p.id).delete()
         return {"mensaje": "Producto eliminado"}
 
 
 @router.get("/{id}/movimientos")
 def listar_movimientos(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
-        movimientos = session.query(Movimiento).filter(
-            Movimiento.producto_id == id
+        # Se filtra por dueño: antes cualquier usuario autenticado podía leer
+        # los movimientos de un producto ajeno adivinando el id.
+        movimientos = session.query(Movimiento).join(
+            Producto, Movimiento.producto_id == Producto.id
+        ).filter(
+            Producto.id == id,
+            Producto.usuario_id == usuario_id
         ).order_by(Movimiento.fecha_hora.desc()).all()
         return [{
             "tipo": m.tipo,
@@ -166,12 +198,8 @@ def recargar_inventario(id: int, recarga: RecargaInventario, usuario_id: int = D
 
 
 @router.post("/{id}/movimiento")
-def registrar_movimiento(id: int, movimiento: dict, usuario_id: int = Depends(verificar_token)):
-    tipo = movimiento.get("tipo")
-    cantidad = movimiento.get("cantidad", 0)
-
-    if tipo not in ("entrada", "salida"):
-        raise HTTPException(status_code=400, detail="Tipo inválido")
+def registrar_movimiento(id: int, movimiento: MovimientoCrear, usuario_id: int = Depends(verificar_token)):
+    tipo, cantidad = movimiento.tipo, movimiento.cantidad
 
     with get_db() as session:
         p = session.query(Producto).filter(

@@ -44,7 +44,8 @@ def listar_clientes(usuario_id: int = Depends(verificar_token)):
         result = []
         for c in clientes:
             ultima = session.query(func.max(Venta.fecha_hora)).filter(
-                Venta.cliente_id == c.id
+                Venta.cliente_id == c.id,
+                Venta.usuario_id == usuario_id
             ).scalar()
             result.append(serializar(c, ultima))
         return result
@@ -77,7 +78,8 @@ def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
         ultima = session.query(func.max(Venta.fecha_hora)).filter(
-            Venta.cliente_id == c.id
+            Venta.cliente_id == c.id,
+            Venta.usuario_id == usuario_id
         ).scalar()
         return serializar(c, ultima)
 
@@ -100,11 +102,19 @@ def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(ver
         if cliente.credito_usado is not None:
             updates[Cliente.credito_usado] = cliente.credito_usado
 
-        session.query(Cliente).filter(Cliente.id == id).update(updates)
+        # El filtro por dueño se repite aquí: no basta con la comprobación previa.
+        session.query(Cliente).filter(
+            Cliente.id == id,
+            Cliente.usuario_id == usuario_id
+        ).update(updates)
 
-        c = session.query(Cliente).filter(Cliente.id == id).first()
+        c = session.query(Cliente).filter(
+            Cliente.id == id,
+            Cliente.usuario_id == usuario_id
+        ).first()
         ultima = session.query(func.max(Venta.fecha_hora)).filter(
-            Venta.cliente_id == id
+            Venta.cliente_id == id,
+            Venta.usuario_id == usuario_id
         ).scalar()
         return serializar(c, ultima)
 

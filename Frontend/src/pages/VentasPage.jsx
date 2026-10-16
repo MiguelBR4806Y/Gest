@@ -1,118 +1,190 @@
-import { useState, useEffect, useCallback } from "react";
-import { api, formatHora, fmtMoney, fmtMoneyUSD } from "../lib/api";
-import Modal from "../components/Modal";
-import { Plus, Trash2, ShoppingCart, TrendingUp, Receipt, Search, Tag } from "lucide-react";
-import { useToast } from "../context/ToastContext";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Eye, Package, Plus, Search, ShoppingCart, Tag, Trash2, TrendingUp,
+} from "lucide-react";
 
-const METODOS = ["efectivo", "tarjeta", "transferencia", "credito"];
+import Modal, { ConfirmDialog } from "../components/Modal";
+import { Button, IconButton } from "../components/ui/Button";
+import { Card, EmptyState, StatCard } from "../components/ui/Card";
+import { Field, Input, Select } from "../components/ui/Field";
+import { BadgeMetodoPago, TableSkeleton } from "../components/ui/Feedback";
+import { useToast } from "../context/ToastContext";
+import { useDebounce } from "../hooks/useDebounce";
+import { api, formatHora, fmtMoney } from "../lib/api";
+
+const METODOS = [
+  { value: "efectivo", label: "Efectivo" },
+  { value: "tarjeta", label: "Tarjeta" },
+  { value: "transferencia", label: "Transferencia" },
+  { value: "credito", label: "Crédito" },
+];
+
+const hoyISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 export default function VentasPage() {
-  const [ventas, setVentas]       = useState([]);
-  const [clientes, setClientes]   = useState([]);
-  const [productos, setProductos] = useState([]);
-  const [resumen, setResumen]     = useState({ total: 0, transacciones: 0, promedio: 0 });
-  const [loading, setLoading]     = useState(true);
-  const [fecha, setFecha]         = useState(() => {
-    const d = new Date();
-    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-  });
-
-  const [nuevaOpen, setNuevaOpen] = useState(false);
-  const [detalleOpen, setDetalleOpen] = useState(false);
-  const [ventaDetalle, setVentaDetalle] = useState(null);
-
-  const [vForm, setVForm] = useState({ cliente_id: "", metodo_pago: "efectivo" });
-  const [items, setItems] = useState([]);
-  const [selProd, setSelProd] = useState("");
-  const [selCant, setSelCant] = useState(1);
-  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
+  const [fecha, setFecha] = useState(hoyISO);
+  const [ventas, setVentas] = useState([]);
+  const [resumen, setResumen] = useState({ total: 0, transacciones: 0, promedio: 0 });
+  const [cargando, setCargando] = useState(true);
+  const [busqueda, setBusqueda] = useState("");
+  const busquedaDiferida = useDebounce(busqueda, 250);
+
+  const [nuevaAbierta, setNuevaAbierta] = useState(false);
+  const [detalle, setDetalle] = useState(null);
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
+  const [aAnular, setAAnular] = useState(null);
+
+  const [clientes, setClientes] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [form, setForm] = useState({ cliente_id: "", metodo_pago: "efectivo" });
+  const [items, setItems] = useState([]);
+  const [productoSel, setProductoSel] = useState("");
+  const [cantidad, setCantidad] = useState(1);
+  const [guardando, setGuardando] = useState(false);
+
   const cargar = useCallback(async () => {
-    setLoading(true);
+    setCargando(true);
     try {
       const data = await api.get(`/ventas/resumen-dia?fecha=${fecha}`);
       const lista = data.ultimas_ventas ?? [];
       setVentas(lista);
-      const total = lista.reduce((s, v) => s + (v.total ?? 0), 0);
-      setResumen({ total, transacciones: lista.length, promedio: lista.length ? total / lista.length : 0 });
-    } catch(e) { console.error(e); }
-    finally { setLoading(false); }
-  }, [fecha]);
+      const total = lista.reduce((s, v) => s + Number(v.total || 0), 0);
+      setResumen({
+        total,
+        transacciones: data.numero_ventas ?? lista.length,
+        promedio: lista.length ? total / lista.length : 0,
+      });
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setCargando(false);
+    }
+  }, [fecha, toast]);
 
-  useEffect(() => { cargar(); return () => {}; }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   async function abrirNueva() {
-    const [c, p] = await Promise.all([
-      api.get("/clientes/").catch(() => []),
-      api.get("/productos/").catch(() => []),
-    ]);
-    setClientes(c);
-    setProductos(p);
-    setVForm({ cliente_id: "", metodo_pago: "efectivo" });
+    try {
+      const [c, p] = await Promise.all([
+        api.get("/clientes/").catch(() => []),
+        api.get("/productos/").catch(() => []),
+      ]);
+      setClientes(Array.isArray(c) ? c : []);
+      setProductos(Array.isArray(p) ? p : []);
+    } catch {
+      setClientes([]);
+      setProductos([]);
+    }
+    setForm({ cliente_id: "", metodo_pago: "efectivo" });
     setItems([]);
-    setNuevaOpen(true);
+    setProductoSel("");
+    setCantidad(1);
+    setNuevaAbierta(true);
   }
 
   function agregarItem() {
-    if (!selProd) return;
-    const prod = productos.find(p => String(p.id) === String(selProd));
+    const prod = productos.find((p) => String(p.id) === String(productoSel));
     if (!prod) return;
-    setItems(it => {
-      const existing = it.findIndex(i => i.producto_id === prod.id);
-      if (existing >= 0) {
-        return it.map((i, idx) => idx === existing ? { ...i, cantidad: i.cantidad + Number(selCant) } : i);
-      }
-      return [...it, {
-        producto_id: prod.id,
-        nombre: prod.nombre,
-        precio: prod.precio,
-        precio_dolar: prod.precio_dolar,
-        cantidad: Number(selCant),
-        promocion: prod.promocion || null,
-      }];
-    });
-    setSelProd("");
-    setSelCant(1);
-  }
 
-  function quitarItem(idx) { setItems(it => it.filter((_, i) => i !== idx)); }
+    const cant = Math.max(1, Number(cantidad) || 1);
+
+    if (cant > prod.stock) {
+      toast(`Solo quedan ${prod.stock} unidades de ${prod.nombre}`, "error");
+      return;
+    }
+
+    setItems((it) => {
+      const idx = it.findIndex((i) => i.producto_id === prod.id);
+      if (idx >= 0) {
+        const nuevaCant = it[idx].cantidad + cant;
+        if (nuevaCant > prod.stock) {
+          toast(`Solo quedan ${prod.stock} unidades de ${prod.nombre}`, "error");
+          return it;
+        }
+        return it.map((i, k) => (k === idx ? { ...i, cantidad: nuevaCant } : i));
+      }
+      return [
+        ...it,
+        {
+          producto_id: prod.id,
+          nombre: prod.nombre,
+          precio: prod.precio,
+          precio_dolar: prod.precio_dolar,
+          cantidad: cant,
+          promocion: prod.promocion || null,
+        },
+      ];
+    });
+
+    setProductoSel("");
+    setCantidad(1);
+  }
 
   const totalVenta = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
 
-  async function registrarVenta() {
-    if (items.length === 0) { toast("Agrega al menos un producto", "info"); return; }
-    setSaving(true);
+  async function registrar() {
+    if (items.length === 0) return;
+    setGuardando(true);
     try {
-      await api.post("/ventas/", {
-        cliente_id: vForm.cliente_id ? Number(vForm.cliente_id) : null,
-        metodo_pago: vForm.metodo_pago,
-        items: items.map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio })),
+      const r = await api.post("/ventas/", {
+        cliente_id: form.cliente_id ? Number(form.cliente_id) : null,
+        metodo_pago: form.metodo_pago,
+        items: items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
       });
-      setNuevaOpen(false);
+      setNuevaAbierta(false);
+      toast(
+        r.promos_aplicadas?.length
+          ? `Venta registrada. Promociones: ${r.promos_aplicadas.join(", ")}`
+          : "Venta registrada"
+      );
       cargar();
-    } catch(e) { toast(e.message, "error"); }
-    finally { setSaving(false); }
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  async function abrirDetalle(v) {
+  async function verDetalle(v) {
+    setDetalleAbierto(true);
+    setDetalle(null);
     try {
-      const d = await api.get(`/ventas/${v.id}`);
-      setVentaDetalle(d);
-    } catch { setVentaDetalle(v); }
-    setDetalleOpen(true);
+      setDetalle(await api.get(`/ventas/${v.id}`));
+    } catch {
+      setDetalle(v);
+    }
   }
 
-  async function anularVenta(id) {
-    if (!confirm("¿Anular esta venta?")) return;
-    try { await api.delete(`/ventas/${id}`); cargar(); }
-    catch(e) { toast(e.message, "error"); }
+  async function anular() {
+    if (!aAnular) return;
+    setGuardando(true);
+    try {
+      await api.delete(`/ventas/${aAnular.id}`);
+      toast("Venta anulada y stock devuelto");
+      setAAnular(null);
+      cargar();
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  const metodoBadge = (m) => {
-    const map = { efectivo: "badge-green", tarjeta: "badge-blue", transferencia: "badge-blue", credito: "badge-yellow" };
-    return map[m] ?? "badge-blue";
-  };
+  const filtradas = ventas.filter((v) => {
+    if (!busquedaDiferida) return true;
+    const q = busquedaDiferida.toLowerCase();
+    return (
+      String(v.cliente_nombre || "").toLowerCase().includes(q) ||
+      String(v.productos || "").toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -121,235 +193,337 @@ export default function VentasPage() {
           <h1>Ventas</h1>
           <p>Registro y control de transacciones</p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={abrirNueva}>
-          <Plus size={16} /> Nueva venta
-        </button>
+        <Button icon={Plus} onClick={abrirNueva}>
+          Nueva venta
+        </Button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="metric-card border border-brand-500/20 bg-gradient-to-br from-brand-500/5 to-transparent">
-          <div className="metric-icon bg-brand-500/10">
-            <TrendingUp size={20} className="text-brand-400" />
-          </div>
-          <div>
-            <p className="text-xs text-content-muted">Total del día</p>
-            <p className="text-xl font-bold text-brand-400">{fmtMoney(resumen.total)}</p>
-          </div>
+        <StatCard icon={TrendingUp} label="Total del día" value={fmtMoney(resumen.total)} tono="green" />
+        <StatCard icon={ShoppingCart} label="Transacciones" value={resumen.transacciones} />
+        <StatCard icon={Package} label="Ticket promedio" value={fmtMoney(resumen.promedio)} tono="yellow" />
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-content-subtle pointer-events-none"
+            aria-hidden="true"
+          />
+          <Input
+            className="pl-10"
+            placeholder="Buscar por cliente o producto…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            aria-label="Buscar ventas"
+          />
         </div>
-        <div className="card-gradient p-6 flex items-start gap-4">
-          <div className="metric-icon bg-secondary-500/10">
-            <Receipt size={20} className="text-secondary-400" />
-          </div>
-          <div>
-            <p className="text-xs text-content-muted">Transacciones</p>
-            <p className="text-xl font-bold text-content">{resumen.transacciones}</p>
-          </div>
-        </div>
-        <div className="card-gradient p-6 flex items-start gap-4">
-          <div className="metric-icon bg-accent-500/10">
-            <ShoppingCart size={20} className="text-accent-400" />
-          </div>
-          <div>
-            <p className="text-xs text-content-muted">Promedio</p>
-            <p className="text-xl font-bold text-accent-400">{fmtMoney(resumen.promedio)}</p>
-          </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <label htmlFor="fecha-ventas" className="text-sm text-content-muted whitespace-nowrap">
+            Fecha
+          </label>
+          <Input
+            id="fecha-ventas"
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="w-auto"
+          />
         </div>
       </div>
 
-      {/* Date filter */}
-      <div className="flex items-center gap-3">
-        <label className="text-sm text-content-muted font-medium">Fecha:</label>
-        <input type="date" className="input w-auto" value={fecha} onChange={e => setFecha(e.target.value)} />
-      </div>
-
-      {/* Table */}
-      <div className="table-container">
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : ventas.length === 0 ? (
-          <div className="empty-state">
-            <ShoppingCart size={40} />
-            <p>No hay ventas para esta fecha.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className="th">#</th>
-                  <th className="th">Cliente</th>
-                  <th className="th hidden md:table-cell">Productos</th>
-                  <th className="th hidden sm:table-cell">Hora</th>
-                  <th className="th text-right">Total</th>
-                  <th className="th hidden sm:table-cell">Método</th>
-                  <th className="th text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ventas.map((v, i) => (
-                  <tr key={v.id} className="table-row">
-                    <td className="td text-content-subtle">{i + 1}</td>
-                    <td className="td font-medium text-content">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
-                    <td className="td hidden md:table-cell text-content-muted text-xs">{v.productos ?? "—"}</td>
-                    <td className="td hidden sm:table-cell text-content-muted">{formatHora(v.fecha_hora ?? v.fecha ?? v.hora)}</td>
-                    <td className="td text-right font-semibold text-brand-400">{fmtMoney(v.total)}</td>
-                    <td className="td hidden sm:table-cell">
-                      <span className={metodoBadge(v.metodo_pago)}>{v.metodo_pago}</span>
-                    </td>
-                    <td className="td">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => abrirDetalle(v)} className="btn-ghost p-1.5 text-content-muted">
-                          <Search size={14} />
-                        </button>
-                        <button onClick={() => anularVenta(v.id)} className="btn-ghost p-1.5 text-red-400 hover:text-red-300">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+      {cargando ? (
+        <TableSkeleton filas={6} columnas={5} />
+      ) : (
+        <Card className="overflow-hidden">
+          {filtradas.length === 0 ? (
+            <EmptyState
+              icon={ShoppingCart}
+              title={ventas.length === 0 ? "Sin ventas en esta fecha" : "Sin resultados"}
+              text={
+                ventas.length === 0
+                  ? "Cambia la fecha o registra una nueva venta."
+                  : "Prueba con otro término de búsqueda."
+              }
+              action={
+                ventas.length === 0 && (
+                  <Button size="sm" icon={Plus} onClick={abrirNueva}>
+                    Registrar venta
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="th w-12">#</th>
+                    <th className="th">Cliente</th>
+                    <th className="th hidden md:table-cell">Productos</th>
+                    <th className="th hidden sm:table-cell">Hora</th>
+                    <th className="th text-right">Total</th>
+                    <th className="th hidden sm:table-cell">Método</th>
+                    <th className="th text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody>
+                  {filtradas.map((v, i) => (
+                    <tr key={v.id ?? i} className="table-row">
+                      <td className="td text-content-subtle tabular">{v.id}</td>
+                      <td className="td font-medium max-w-[10rem] truncate">
+                        {v.cliente_nombre || "Consumidor final"}
+                      </td>
+                      <td className="td hidden md:table-cell text-content-muted text-xs max-w-[16rem] truncate">
+                        {v.productos || "—"}
+                      </td>
+                      <td className="td hidden sm:table-cell text-content-muted whitespace-nowrap">
+                        {formatHora(v.fecha_hora)}
+                      </td>
+                      <td className="td text-right font-semibold tabular">{fmtMoney(v.total)}</td>
+                      <td className="td hidden sm:table-cell">
+                        <BadgeMetodoPago metodo={v.metodo_pago} />
+                      </td>
+                      <td className="td">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <IconButton
+                            label="Ver detalle"
+                            icon={Eye}
+                            onClick={() => verDetalle(v)}
+                          />
+                          <IconButton
+                            label="Anular venta"
+                            icon={Trash2}
+                            onClick={() => setAAnular(v)}
+                            className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
-      {/* Nueva venta modal */}
-      <Modal title="Nueva venta" open={nuevaOpen} onClose={() => setNuevaOpen(false)} size="lg">
+      {/* Nueva venta */}
+      <Modal
+        open={nuevaAbierta}
+        onClose={() => setNuevaAbierta(false)}
+        title="Nueva venta"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setNuevaAbierta(false)} disabled={guardando}>
+              Cancelar
+            </Button>
+            <Button onClick={registrar} loading={guardando} disabled={items.length === 0}>
+              Registrar venta
+            </Button>
+          </>
+        }
+      >
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="label">Cliente (opcional)</label>
-              <select className="input" value={vForm.cliente_id} onChange={e => setVForm(f => ({ ...f, cliente_id: e.target.value }))}>
-                <option value="">Sin cliente</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Método de pago</label>
-              <select className="input" value={vForm.metodo_pago} onChange={e => setVForm(f => ({ ...f, metodo_pago: e.target.value }))}>
-                {METODOS.map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label className="label">Producto</label>
-              <select className="input" value={selProd} onChange={e => setSelProd(e.target.value)}>
-                <option value="">Seleccionar...</option>
-                {productos.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} — {fmtMoneyUSD(p.precio_dolar)} / {fmtMoney(p.precio)}{p.promocion ? ` [${p.promocion.nombre}]` : ""}
+            <Field label="Cliente">
+              <Select
+                value={form.cliente_id}
+                onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}
+              >
+                <option value="">Consumidor final</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
                   </option>
                 ))}
-              </select>
+              </Select>
+            </Field>
+
+            <Field label="Método de pago" hint={form.metodo_pago === "credito" ? "Requiere cliente seleccionado." : undefined}>
+              <Select
+                value={form.metodo_pago}
+                onChange={(e) => setForm((f) => ({ ...f, metodo_pago: e.target.value }))}
+              >
+                {METODOS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          <div className="p-3.5 rounded-lg bg-surface-sunken border border-border">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+              <div className="flex-1 min-w-0">
+                <Field label="Producto">
+                  <Select value={productoSel} onChange={(e) => setProductoSel(e.target.value)}>
+                    <option value="">Seleccionar…</option>
+                    {productos.map((p) => (
+                      <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                        {p.nombre} — {fmtMoney(p.precio)} ({p.stock} disp.)
+                        {p.promocion ? ` · ${p.promocion.nombre}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <Field label="Cantidad">
+                <Input
+                  type="number"
+                  min="1"
+                  value={cantidad}
+                  onChange={(e) => setCantidad(e.target.value)}
+                  className="w-24"
+                />
+              </Field>
+              <Button
+                variant="secondary"
+                icon={Plus}
+                onClick={agregarItem}
+                disabled={!productoSel}
+                className="shrink-0"
+              >
+                Agregar
+              </Button>
             </div>
-            <div className="w-20">
-              <label className="label">Cant.</label>
-              <input className="input" type="number" min="1" value={selCant} onChange={e => setSelCant(e.target.value)} />
-            </div>
-            <button className="btn-secondary flex items-center gap-1 shrink-0" onClick={agregarItem}>
-              <Plus size={14} /> Agregar
-            </button>
           </div>
 
           {items.length > 0 && (
-            <div className="bg-surface rounded-2xl overflow-hidden border border-border/40">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-border/40">
-                  <th className="th">Producto</th>
-                  <th className="th text-center">Cant.</th>
-                  <th className="th text-right">Precio</th>
-                  <th className="th text-right">Subtotal</th>
-                  <th className="th"></th>
-                </tr></thead>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="th">Producto</th>
+                    <th className="th text-center">Cant.</th>
+                    <th className="th text-right">Precio</th>
+                    <th className="th text-right">Subtotal</th>
+                    <th className="th w-10" />
+                  </tr>
+                </thead>
                 <tbody>
                   {items.map((it, i) => (
-                    <tr key={it.id || i} className="table-row">
+                    <tr key={it.producto_id} className="table-row">
                       <td className="td">
-                        <div className="flex items-center gap-1.5">
-                          {it.nombre}
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{it.nombre}</span>
                           {it.promocion && (
-                            <span className="badge-yellow text-[10px] px-1 py-0.5 flex items-center gap-0.5">
-                              <Tag size={8} />{it.promocion.tipo === "porcentaje" ? `${it.promocion.valor}%` : it.promocion.tipo === "2x1" ? "2x1" : `C$${it.promocion.valor}`}
+                            <span className="badge-yellow shrink-0">
+                              <Tag size={9} aria-hidden="true" />
+                              {it.promocion.tipo === "porcentaje"
+                                ? `${it.promocion.valor}%`
+                                : it.promocion.tipo === "2x1"
+                                  ? "2x1"
+                                  : `C$${it.promocion.valor}`}
                             </span>
                           )}
-                        </div>
+                        </span>
                       </td>
-                      <td className="td text-center">{it.cantidad}</td>
-                      <td className="td text-right text-content-muted">
-                        <div className="flex flex-col leading-tight">
-                          <span className="text-xs">{fmtMoneyUSD(it.precio_dolar)}</span>
-                          <span className="text-[10px]">{fmtMoney(it.precio)}</span>
-                        </div>
+                      <td className="td text-center tabular">{it.cantidad}</td>
+                      <td className="td text-right tabular text-content-muted">{fmtMoney(it.precio)}</td>
+                      <td className="td text-right font-medium tabular">
+                        {fmtMoney(it.precio * it.cantidad)}
                       </td>
-                      <td className="td text-right font-medium text-brand-400">{fmtMoney(it.precio * it.cantidad)}</td>
                       <td className="td">
-                        <button onClick={() => quitarItem(i)} className="btn-ghost p-1 text-red-400 hover:text-red-300">
-                          <Trash2 size={13} />
-                        </button>
+                        <IconButton
+                          label={`Quitar ${it.nombre}`}
+                          icon={Trash2}
+                          onClick={() => setItems((x) => x.filter((_, k) => k !== i))}
+                          className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                        />
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-border/50">
-                    <td colSpan={3} className="td text-right font-bold text-content">Total:</td>
-                    <td className="td text-right font-bold text-brand-400 text-base">{fmtMoney(totalVenta)}</td>
+                  <tr className="border-t border-border bg-surface-elevated/60">
+                    <td colSpan={3} className="td text-right font-semibold">
+                      Total
+                    </td>
+                    <td className="td text-right font-bold text-base tabular">{fmtMoney(totalVenta)}</td>
                     <td />
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button className="btn-secondary" onClick={() => setNuevaOpen(false)}>Cancelar</button>
-            <button className="btn-primary" onClick={registrarVenta} disabled={saving || items.length === 0}>
-              {saving ? "Guardando..." : "Registrar venta"}
-            </button>
-          </div>
         </div>
       </Modal>
 
       {/* Detalle */}
-      <Modal title="Detalle de venta" open={detalleOpen} onClose={() => setDetalleOpen(false)}>
-        {ventaDetalle && (
+      <Modal
+        open={detalleAbierto}
+        onClose={() => setDetalleAbierto(false)}
+        title={detalle ? `Venta #${detalle.id}` : "Detalle de venta"}
+        footer={
+          <Button variant="secondary" onClick={() => setDetalleAbierto(false)}>
+            Cerrar
+          </Button>
+        }
+      >
+        {!detalle ? (
+          <TableSkeleton filas={3} columnas={3} />
+        ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-content-muted">Cliente:</span> <span className="text-content ml-1">{ventaDetalle.cliente_nombre ?? ventaDetalle.cliente ?? "—"}</span></div>
-              <div><span className="text-content-muted">Método:</span> <span className={`ml-1 ${metodoBadge(ventaDetalle.metodo_pago)}`}>{ventaDetalle.metodo_pago}</span></div>
-              <div><span className="text-content-muted">Hora:</span> <span className="text-content ml-1">{formatHora(ventaDetalle.fecha_hora ?? ventaDetalle.hora ?? ventaDetalle.fecha)}</span></div>
-              <div><span className="text-content-muted">Total:</span> <span className="text-brand-400 font-bold ml-1">{fmtMoney(ventaDetalle.total)}</span></div>
-            </div>
-            {ventaDetalle.items && (
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-border/50">
-                  <th className="th">Producto</th>
-                  <th className="th text-center">Cant.</th>
-                  <th className="th text-right">Subtotal</th>
-                </tr></thead>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-content-muted text-xs">Cliente</dt>
+                <dd className="text-content mt-0.5">{detalle.cliente_nombre || "Consumidor final"}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted text-xs">Método de pago</dt>
+                <dd className="mt-0.5">
+                  <BadgeMetodoPago metodo={detalle.metodo_pago} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-content-muted text-xs">Hora</dt>
+                <dd className="text-content mt-0.5">{formatHora(detalle.fecha_hora)}</dd>
+              </div>
+              <div>
+                <dt className="text-content-muted text-xs">Total</dt>
+                <dd className="text-content font-bold tabular mt-0.5">{fmtMoney(detalle.total)}</dd>
+              </div>
+            </dl>
+
+            {detalle.items?.length > 0 && (
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="th">Producto</th>
+                    <th className="th text-center">Cant.</th>
+                    <th className="th text-right">Subtotal</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {ventaDetalle.items.map((it, i) => (
-                    <tr key={it.id || i} className="table-row">
-                      <td className="td">{it.nombre ?? it.producto}</td>
-                      <td className="td text-center">{it.cantidad}</td>
-                      <td className="td text-right text-brand-400">{fmtMoney(it.subtotal ?? (it.precio_unitario * it.cantidad))}</td>
+                  {detalle.items.map((it, i) => (
+                    <tr key={i} className="table-row">
+                      <td className="td">{it.nombre}</td>
+                      <td className="td text-center tabular">{it.cantidad}</td>
+                      <td className="td text-right tabular">
+                        {fmtMoney(it.subtotal ?? it.precio_unitario * it.cantidad)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-            <div className="flex justify-end">
-              <button className="btn-secondary" onClick={() => setDetalleOpen(false)}>Cerrar</button>
-            </div>
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(aAnular)}
+        onClose={() => setAAnular(null)}
+        onConfirm={anular}
+        loading={guardando}
+        title="Anular venta"
+        confirmLabel="Anular venta"
+        mensaje={`Se devolverá el stock de los productos y se revertirá el crédito si aplica. La venta #${aAnular?.id ?? ""} se eliminará del historial.`}
+      />
     </div>
   );
 }

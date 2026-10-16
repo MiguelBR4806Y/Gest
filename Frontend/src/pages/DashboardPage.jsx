@@ -1,294 +1,378 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, formatHora, fmtMoney } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
 import {
-  Package, TrendingUp, Users, TriangleAlert as AlertTriangle,
-  RefreshCw, DollarSign, X, Plus, FileText,
-  CreditCard, Wallet, Banknote, Bot, Calendar,
-  BadgePercent, ArrowUpRight, ArrowDownRight, Tag
+  AlertTriangle, ArrowDownRight, ArrowUpRight, BadgePercent, Banknote,
+  Bot, Calendar, CreditCard, DollarSign, Package, Plus, RefreshCw,
+  ShoppingCart, Tag, TrendingUp, Users, Wallet, X,
 } from "lucide-react";
 
-function MetricCard({ icon: Icon, label, value, sub, color = "brand" }) {
-  const colors = {
-    brand:  { bg: "bg-brand-500/10", icon: "text-brand-400", border: "border-brand-500/20", gradient: "from-brand-500/5" },
-    blue:   { bg: "bg-brand-500/10", icon: "text-brand-400", border: "border-brand-500/20", gradient: "from-brand-500/5" },
-    red:    { bg: "bg-red-500/10",   icon: "text-red-400",   border: "border-red-500/20",  gradient: "from-red-500/5" },
-    yellow: { bg: "bg-accent-500/10", icon: "text-accent-400", border: "border-accent-500/20", gradient: "from-accent-500/5" },
-  };
-  const c = colors[color];
-  return (
-    <div className={`card-gradient p-6 flex items-start gap-4 border ${c.border} bg-gradient-to-br ${c.gradient} to-transparent`}>
-      <div className={`w-11 h-11 rounded-2xl ${c.bg} flex items-center justify-center shrink-0`}>
-        <Icon size={20} className={c.icon} />
-      </div>
-      <div>
-        <p className="text-xs text-content-muted mb-0.5">{label}</p>
-        <p className="text-2xl font-bold text-content">{value ?? "—"}</p>
-        {sub && <p className="text-xs text-content-subtle mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
+import { CardSkeleton, TableSkeleton } from "../components/ui/Feedback";
+import { Button, IconButton } from "../components/ui/Button";
+import { Card, CardHeader, EmptyState, StatCard } from "../components/ui/Card";
+import { useAuth } from "../context/AuthContext";
+import { api, formatHora, fmtMoney } from "../lib/api";
+
+const METODOS = {
+  efectivo: { label: "Efectivo", icon: Banknote, color: "text-secondary-600 dark:text-secondary-400" },
+  tarjeta: { label: "Tarjeta", icon: CreditCard, color: "text-brand-600 dark:text-brand-300" },
+  transferencia: { label: "Transferencia", icon: Wallet, color: "text-accent-600 dark:text-accent-400" },
+  credito: { label: "Crédito", icon: ShoppingCart, color: "text-red-600 dark:text-red-400" },
+};
+
+const ACCESOS = [
+  { to: "/ventas", label: "Nueva venta", icon: Plus, primario: true },
+  { to: "/inventario", label: "Agregar producto", icon: Package },
+  { to: "/clientes", label: "Nuevo cliente", icon: Users },
+  { to: "/gesti", label: "Preguntar a Gesti", icon: Bot },
+];
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [metrics, setMetrics] = useState(null);
+
+  const [metricas, setMetricas] = useState(null);
   const [ultimasVentas, setUltimasVentas] = useState([]);
   const [stockBajo, setStockBajo] = useState([]);
   const [promociones, setPromociones] = useState([]);
   const [anios, setAnios] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dismissTasa, setDismissTasa] = useState(() => sessionStorage.getItem("dismissTasa") === "true");
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [avisoTasaVisible, setAvisoTasaVisible] = useState(
+    () => sessionStorage.getItem("ocultarAvisoTasa") !== "true"
+  );
 
-  useEffect(() => { cargar(); }, []);
-
-  async function cargar() {
-    setLoading(true);
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setError("");
     try {
-      const [dash, ventasHoy, stockBajoList, promos, years] = await Promise.all([
+      const [dash, resumen, bajo, promos, years] = await Promise.all([
         api.get("/reportes/dashboard"),
         api.get("/ventas/resumen-dia").catch(() => null),
         api.get("/productos/stock-bajo").catch(() => []),
         api.get("/promociones/").catch(() => []),
-        api.get("/organizacion/anios").catch(() => []),
+        // El endpoint devuelve { anios: [...] }, no un array — antes se
+        // comprobaba Array.isArray sobre el objeto y nunca se pintaba nada.
+        api.get("/organizacion/anios").catch(() => null),
       ]);
-      setMetrics({
+
+      setMetricas({
         total_productos: dash.total_productos,
         ventas_hoy: dash.resumen_dia?.total_ventas ?? 0,
         total_clientes: dash.total_clientes,
         alertas_stock: dash.stock_bajo,
       });
-      setUltimasVentas(ventasHoy?.ultimas_ventas ?? []);
-      setStockBajo(Array.isArray(stockBajoList) ? stockBajoList : []);
-      setPromociones(Array.isArray(promos) ? promos.filter(p => p.activa) : []);
-      setAnios(Array.isArray(years) ? years : []);
+      setUltimasVentas(resumen?.ultimas_ventas ?? []);
+      setStockBajo(Array.isArray(bajo) ? bajo : []);
+      setPromociones(Array.isArray(promos) ? promos.filter((p) => p.activa) : []);
+      setAnios(Array.isArray(years?.anios) ? years.anios : []);
     } catch (e) {
-      console.error(e);
+      setError(e.message || "No se pudo cargar el dashboard");
     } finally {
-      setLoading(false);
+      setCargando(false);
     }
-  }
+  }, []);
 
-  const metodosPago = ultimasVentas.reduce((acc, v) => {
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  const porMetodo = ultimasVentas.reduce((acc, v) => {
     const m = v.metodo_pago || "otro";
-    acc[m] = (acc[m] || 0) + Number(v.total);
+    acc[m] = (acc[m] || 0) + Number(v.total || 0);
     return acc;
   }, {});
 
-  const metodoInfo = {
-    efectivo:      { label: "Efectivo",      icon: Banknote,    color: "text-secondary-400", bg: "bg-secondary-500/10", border: "border-secondary-500/20" },
-    tarjeta:       { label: "Tarjeta",       icon: CreditCard,  color: "text-brand-400",     bg: "bg-brand-500/10",    border: "border-brand-500/20" },
-    transferencia: { label: "Transferencia", icon: Wallet,      color: "text-accent-400",    bg: "bg-accent-500/10",   border: "border-accent-500/20" },
-    credito:       { label: "Crédito",       icon: FileText,    color: "text-red-400",       bg: "bg-red-500/10",      border: "border-red-500/20" },
-  };
-
   const anioActual = new Date().getFullYear();
-  const currentYear = anios.find(a => a.anio === anioActual);
-  const prevYear = anios.find(a => a.anio === anioActual - 1);
-  const ingresosDiff = currentYear && prevYear
-    ? ((currentYear.total_ingresos - prevYear.total_ingresos) / prevYear.total_ingresos * 100).toFixed(0)
-    : null;
+  const delAnio = anios.find((a) => a.anio === anioActual);
+  const anioPrevio = anios.find((a) => a.anio === anioActual - 1);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-9 h-9 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  const variacion =
+    delAnio && anioPrevio && Number(anioPrevio.total_ingresos) > 0
+      ? Math.round(
+          ((delAnio.total_ingresos - anioPrevio.total_ingresos) / anioPrevio.total_ingresos) * 100
+        )
+      : null;
 
   return (
-    <div className="space-y-7 animate-fade-in">
-      {/* Header */}
+    <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <div>
           <h1>Dashboard</h1>
-          <p>Hola, <span className="text-content">{user?.usuario}</span>. Aquí está el resumen del día.</p>
+          <p>
+            Hola, <span className="text-content font-medium">{user?.usuario}</span>. Este es el
+            resumen de hoy.
+          </p>
         </div>
-        <button onClick={cargar} className="btn-ghost flex items-center gap-2 text-sm">
-          <RefreshCw size={15} /> Actualizar
-        </button>
+        <Button variant="secondary" size="sm" icon={RefreshCw} onClick={cargar} loading={cargando}>
+          Actualizar
+        </Button>
       </div>
 
-      {/* Tasa de cambio notification */}
-      {!user?.tasa_cambio_configurada && !dismissTasa && (
-        <div className="card p-4 border border-accent-500/30 bg-gradient-to-r from-accent-500/5 to-transparent flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-accent-500/15 flex items-center justify-center shrink-0 mt-0.5">
-            <DollarSign size={17} className="text-accent-400" />
+      {!user?.tasa_cambio_configurada && avisoTasaVisible && (
+        <div className="card p-4 border-accent-500/30 flex items-start gap-3" role="status">
+          <div className="w-9 h-9 rounded-lg bg-accent-500/15 flex items-center justify-center shrink-0">
+            <DollarSign size={17} className="text-accent-600 dark:text-accent-400" aria-hidden="true" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-content">Configura tu tasa de cambio</p>
             <p className="text-xs text-content-muted mt-0.5">
-              Establece la tasa de cambio C$ / USD para que los precios se conviertan automáticamente a dólares.
-              Puedes cambiarla en cualquier momento en Configuración.
+              Con la tasa C$ / US$ los precios se convierten a dólares automáticamente.
             </p>
           </div>
-          <button onClick={() => { setDismissTasa(true); sessionStorage.setItem("dismissTasa", "true"); }}
-            className="shrink-0 text-content-muted hover:text-content transition-colors p-1">
-            <X size={16} />
-          </button>
+          <IconButton
+            label="Descartar aviso"
+            icon={X}
+            onClick={() => {
+              setAvisoTasaVisible(false);
+              sessionStorage.setItem("ocultarAvisoTasa", "true");
+            }}
+          />
         </div>
       )}
 
-      {/* Quick actions */}
-      <div className="flex items-center gap-3 overflow-x-auto pb-1">
-        <button onClick={() => navigate("/ventas")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-500 transition-all duration-200 shadow-glow-sm hover:shadow-glow shrink-0">
-          <Plus size={16} /> Nueva venta
-        </button>
-        <button onClick={() => navigate("/inventario")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-card border border-border text-content text-sm font-medium hover:bg-surface-hover transition-all duration-200 shrink-0">
-          <Package size={16} /> Agregar producto
-        </button>
-        <button onClick={() => navigate("/clientes")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-card border border-border text-content text-sm font-medium hover:bg-surface-hover transition-all duration-200 shrink-0">
-          <Users size={16} /> Nuevo cliente
-        </button>
-        <button onClick={() => navigate("/gesti")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-card border border-border text-content text-sm font-medium hover:bg-surface-hover transition-all duration-200 shrink-0">
-          <Bot size={16} /> Preguntar a Gesti
-        </button>
+      <div className="flex items-center gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
+        {ACCESOS.map(({ to, label, icon, primario }) => (
+          <Button
+            key={to}
+            variant={primario ? "primary" : "secondary"}
+            icon={icon}
+            onClick={() => navigate(to)}
+            className="shrink-0"
+          >
+            {label}
+          </Button>
+        ))}
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricCard icon={Package}       label="Total productos" value={metrics?.total_productos} sub="Registrados" />
-        <MetricCard icon={TrendingUp}    label="Ventas hoy"     value={fmtMoney(metrics?.ventas_hoy)} sub="C$ acumulado hoy" />
-        <MetricCard icon={Users}         label="Total clientes" value={metrics?.total_clientes} sub="Registrados" />
-        <MetricCard icon={AlertTriangle} label="Stock bajo"     value={metrics?.alertas_stock} sub="Productos críticos" color="red" />
-      </div>
+      {error && (
+        <div className="card p-4 border-red-500/30 bg-red-500/5 text-sm text-red-600 dark:text-red-400">
+          {error}
+        </div>
+      )}
 
-      {/* Bottom row 1: tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card">
-          <div className="px-5 py-4 border-b border-border/50">
-            <h3 className="section-title">Últimas ventas</h3>
+      {cargando ? (
+        <>
+          <CardSkeleton />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <TableSkeleton filas={4} columnas={3} />
+            <TableSkeleton filas={4} columnas={2} />
           </div>
-          {ultimasVentas.length === 0
-            ? <p className="text-sm text-content-subtle px-5 py-6">Sin ventas recientes.</p>
-            : <table className="w-full">
-                <thead>
-                  <tr><th className="th">Cliente</th><th className="th">Hora</th><th className="th text-right">Total</th></tr>
-                </thead>
-                <tbody>
-                  {ultimasVentas.map((v, i) => (
-                    <tr key={v.id || i} className="table-row">
-                      <td className="td">{v.cliente_nombre ?? v.cliente ?? "—"}</td>
-                      <td className="td text-content-muted">{formatHora(v.fecha_hora ?? v.hora ?? v.fecha)}</td>
-                      <td className="td text-right font-medium text-brand-400">{fmtMoney(v.total)}</td>
-                    </tr>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatCard
+              icon={Package}
+              label="Productos"
+              value={metricas?.total_productos ?? 0}
+              sub="Registrados"
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Ventas de hoy"
+              value={fmtMoney(metricas?.ventas_hoy)}
+              sub="Acumulado del día"
+              tono="green"
+            />
+            <StatCard
+              icon={Users}
+              label="Clientes"
+              value={metricas?.total_clientes ?? 0}
+              sub="Registrados"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="Stock bajo"
+              value={metricas?.alertas_stock ?? 0}
+              sub={metricas?.alertas_stock > 0 ? "Requieren reposición" : "Todo en orden"}
+              tono={metricas?.alertas_stock > 0 ? "red" : "brand"}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader title="Últimas ventas" subtitle="Movimientos del día" />
+              {ultimasVentas.length === 0 ? (
+                <EmptyState
+                  icon={ShoppingCart}
+                  title="Sin ventas hoy"
+                  text="Cuando registres una venta aparecerá aquí."
+                  action={
+                    <Button size="sm" icon={Plus} onClick={() => navigate("/ventas")}>
+                      Registrar venta
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <th className="th">Cliente</th>
+                        <th className="th">Hora</th>
+                        <th className="th text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ultimasVentas.slice(0, 7).map((v, i) => (
+                        <tr key={v.id ?? i} className="table-row">
+                          <td className="td max-w-[12rem] truncate">
+                            {v.cliente_nombre || "Consumidor final"}
+                          </td>
+                          <td className="td text-content-muted">{formatHora(v.fecha_hora)}</td>
+                          <td className="td text-right font-medium tabular">
+                            {fmtMoney(v.total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Stock bajo"
+                subtitle={
+                  stockBajo.length ? `${stockBajo.length} producto(s) en el mínimo` : "Sin alertas"
+                }
+              />
+              {stockBajo.length === 0 ? (
+                <EmptyState
+                  icon={Package}
+                  title="Inventario saludable"
+                  text="Ningún producto está en su nivel mínimo."
+                />
+              ) : (
+                <ul className="divide-y divide-border/60 max-h-80 overflow-y-auto">
+                  {stockBajo.map((p, i) => (
+                    <li
+                      key={p.id ?? i}
+                      className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-surface-hover"
+                    >
+                      <span className="text-sm text-content truncate">{p.nombre}</span>
+                      <span className="badge-red shrink-0">{p.stock} u.</span>
+                    </li>
                   ))}
-                </tbody>
-              </table>
-          }
-        </div>
-        <div className="card">
-          <div className="px-5 py-4 border-b border-border/50">
-            <h3 className="section-title">Productos con stock bajo</h3>
+                </ul>
+              )}
+            </Card>
           </div>
-          {stockBajo.length === 0
-            ? <p className="text-sm text-content-subtle px-5 py-6">Sin productos críticos.</p>
-            : <div className="divide-y divide-border/40">
-                {stockBajo.map((p, i) => (
-                  <div key={p.id || i} className="flex items-center justify-between px-5 py-3.5 hover:bg-surface-hover transition-colors">
-                    <span className="text-sm text-content truncate">{p.nombre}</span>
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                      <span className="badge-red">{p.stock} u.</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-          }
-        </div>
-      </div>
 
-      {/* Bottom row 2: metodos pago + promociones + resumen año */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Métodos de pago hoy */}
-        <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <CreditCard size={15} className="text-content-muted" />
-            <h3 className="text-sm font-semibold text-content">Métodos de pago hoy</h3>
-          </div>
-          {Object.keys(metodosPago).length === 0
-            ? <p className="text-sm text-content-subtle">Sin ventas hoy.</p>
-            : <div className="space-y-3">
-                {Object.entries(metodosPago).map(([metodo, total]) => {
-                  const info = metodoInfo[metodo] || { label: metodo, icon: Banknote, color: "text-content-muted", bg: "bg-surface-hover", border: "border-border" };
-                  const Icon = info.icon;
-                  return (
-                    <div key={metodo} className={`flex items-center justify-between p-3 rounded-xl ${info.bg} border ${info.border}`}>
-                      <div className="flex items-center gap-2.5">
-                        <Icon size={16} className={info.color} />
-                        <span className="text-sm text-content">{info.label}</span>
-                      </div>
-                      <span className={`text-sm font-semibold ${info.color}`}>{fmtMoney(total)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-          }
-        </div>
-
-        {/* Promociones activas */}
-        <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <BadgePercent size={15} className="text-content-muted" />
-            <h3 className="text-sm font-semibold text-content">Promociones activas</h3>
-          </div>
-          {promociones.length === 0
-            ? <p className="text-sm text-content-subtle">No hay promociones activas.</p>
-            : <div className="space-y-2">
-                {promociones.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-accent-500/5 border border-accent-500/20">
-                    <div className="flex items-center gap-2.5">
-                      <Tag size={14} className="text-accent-400" />
-                      <span className="text-sm text-content">{p.nombre}</span>
-                    </div>
-                    <span className="text-xs font-semibold text-accent-400">
-                      {p.tipo === "porcentaje" ? `${p.valor}%` : p.tipo === "monto_fijo" ? `C$${p.valor}` : p.tipo === "2x1" ? "2x1" : p.tipo}
-                    </span>
-                  </div>
-                ))}
-              </div>
-          }
-          <button onClick={() => navigate("/promociones")}
-            className="mt-3 w-full text-xs text-content-muted hover:text-content text-center py-2 rounded-lg hover:bg-surface-hover transition-all duration-200">
-            Gestionar promociones
-          </button>
-        </div>
-
-        {/* Resumen del año */}
-        <div className="card p-5 bg-gradient-to-br from-brand-500/[0.03] to-transparent">
-          <div className="flex items-center gap-2 mb-4">
-            <Calendar size={15} className="text-content-muted" />
-            <h3 className="text-sm font-semibold text-content">{anioActual}</h3>
-          </div>
-          {currentYear
-            ? <div className="space-y-3">
-                <div className="flex items-center justify-between py-2 border-b border-border/40">
-                  <span className="text-sm text-content-muted">Ingresos totales</span>
-                  <span className="text-sm font-bold text-content">{fmtMoney(currentYear.total_ingresos)}</span>
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-sm text-content-muted">Ventas realizadas</span>
-                  <span className="text-sm font-semibold text-content">{currentYear.total_ventas}</span>
-                </div>
-                {ingresosDiff && (
-                  <div className={`flex items-center gap-1.5 text-xs ${Number(ingresosDiff) >= 0 ? "text-secondary-400" : "text-red-400"}`}>
-                    {Number(ingresosDiff) >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    <span>{Math.abs(ingresosDiff)}% vs año anterior</span>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader title="Métodos de pago" subtitle="Ventas de hoy" />
+              <div className="p-5">
+                {Object.keys(porMetodo).length === 0 ? (
+                  <p className="text-sm text-content-subtle">Sin ventas registradas hoy.</p>
+                ) : (
+                  <ul className="space-y-2.5">
+                    {Object.entries(porMetodo).map(([metodo, total]) => {
+                      const info =
+                        METODOS[metodo] ?? { label: metodo, icon: Banknote, color: "text-content-muted" };
+                      const Icono = info.icon;
+                      return (
+                        <li key={metodo} className="flex items-center justify-between gap-3">
+                          <span className="flex items-center gap-2.5 min-w-0">
+                            <Icono size={15} className={info.color} aria-hidden="true" />
+                            <span className="text-sm text-content truncate">{info.label}</span>
+                          </span>
+                          <span className={`text-sm font-semibold tabular shrink-0 ${info.color}`}>
+                            {fmtMoney(total)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </div>
-            : <p className="text-sm text-content-subtle">Sin datos de {anioActual}.</p>
-          }
-          <button onClick={() => navigate("/organizacion")}
-            className="mt-3 w-full text-xs text-content-muted hover:text-content text-center py-2 rounded-lg hover:bg-surface-hover transition-all duration-200">
-            Ver detalle completo
-          </button>
-        </div>
-      </div>
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Promociones activas"
+                icon={BadgePercent}
+                action={
+                  <Button variant="ghost" size="sm" onClick={() => navigate("/promociones")}>
+                    Gestionar
+                  </Button>
+                }
+              />
+              <div className="p-5">
+                {promociones.length === 0 ? (
+                  <p className="text-sm text-content-subtle">No hay promociones activas.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {promociones.map((p) => (
+                      <li
+                        key={p.id}
+                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-accent-500/5 border border-accent-500/20"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <Tag size={13} className="text-accent-600 dark:text-accent-400 shrink-0" aria-hidden="true" />
+                          <span className="text-sm text-content truncate">{p.nombre}</span>
+                        </span>
+                        <span className="text-xs font-semibold text-accent-600 dark:text-accent-400 shrink-0">
+                          {p.tipo === "porcentaje"
+                            ? `${p.valor}%`
+                            : p.tipo === "monto_fijo"
+                              ? `C$${p.valor}`
+                              : "2x1"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title={String(anioActual)} subtitle="Resumen anual" icon={Calendar} />
+              <div className="p-5">
+                {delAnio ? (
+                  <dl className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-content-muted">Ingresos totales</dt>
+                      <dd className="text-sm font-bold tabular">{fmtMoney(delAnio.total_ingresos)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-content-muted">Ventas realizadas</dt>
+                      <dd className="text-sm font-semibold tabular">{delAnio.total_ventas}</dd>
+                    </div>
+                    {variacion !== null && (
+                      <div
+                        className={`flex items-center gap-1.5 text-xs font-medium ${
+                          variacion >= 0
+                            ? "text-secondary-600 dark:text-secondary-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {variacion >= 0 ? (
+                          <ArrowUpRight size={14} aria-hidden="true" />
+                        ) : (
+                          <ArrowDownRight size={14} aria-hidden="true" />
+                        )}
+                        <span>{Math.abs(variacion)}% respecto a {anioActual - 1}</span>
+                      </div>
+                    )}
+                  </dl>
+                ) : (
+                  <p className="text-sm text-content-subtle">Sin datos de {anioActual} todavía.</p>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-4"
+                  onClick={() => navigate("/organizacion")}
+                >
+                  Ver detalle
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }

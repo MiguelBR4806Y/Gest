@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response, FileResponse
 from Backend.db.database import get_db
 from Backend.db.models import Usuario
@@ -8,21 +7,17 @@ from Backend.routers.facturas import (
     a_zona, generar_pdf, get_config_negocio,
     carpeta_destino, sanitizar_nombre_carpeta
 )
+from Backend.security import limitar
 from sqlalchemy import text
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
 import zipfile
 import io
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 router = APIRouter(prefix="/organizacion", tags=["Organización"])
 
-SECRET_KEY = os.getenv("SECRET_KEY", "clave_secreta_por_defecto")
-ALGORITHM = "HS256"
-security = HTTPBearer(auto_error=False)
+# Niveles de navegación aceptados. Cualquier otro valor se rechaza.
+NIVELES = {"anio", "semestre", "trimestre", "mes", "semana", "dia", "factura"}
 
 FACTURAS_DIR = "facturas"
 
@@ -89,6 +84,14 @@ def obtener_o_generar_pdf(venta: dict, session, usuario_id: int) -> str:
     )
 
 
+def fecha_valida(valor: str) -> str:
+    """Valida una fecha YYYY-MM-DD; evita que un valor basura llegue a Postgres."""
+    try:
+        return datetime.strptime(valor, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Formato de fecha invalido, use YYYY-MM-DD")
+
+
 def ventas_en_periodo(session, usuario_id, nivel, anio=None, semestre=None,
                       trimestre=None, mes=None, semana=None, fecha=None,
                       factura_id=None):
@@ -102,7 +105,7 @@ def ventas_en_periodo(session, usuario_id, nivel, anio=None, semestre=None,
         params["fid"] = factura_id
     elif nivel == "dia":
         where.append(f"({tz})::date = :fecha")
-        params["fecha"] = fecha
+        params["fecha"] = fecha_valida(fecha)
     else:
         where.append(f"EXTRACT(YEAR FROM {tz})::integer = :anio")
         params["anio"] = anio
@@ -305,6 +308,7 @@ def listar_dias(anio: int, mes: int, semana: str, usuario_id: int = Depends(veri
 
 @router.get("/dia/{fecha}")
 def facturas_del_dia(fecha: str, usuario_id: int = Depends(verificar_token)):
+    fecha = fecha_valida(fecha)
     with get_db() as session:
         rows = session.execute(
             text("""
@@ -321,25 +325,20 @@ def facturas_del_dia(fecha: str, usuario_id: int = Depends(verificar_token)):
         return {"facturas": [dict(r) for r in rows]}
 
 
-@router.get("/descargar")
+@router.get("/descargar", dependencies=[Depends(limitar(30, 300, "descargar-facturas"))])
 def descargar(
-    nivel: str = Query(...),
-    anio: int = Query(default=None),
-    semestre: int = Query(default=None),
-    trimestre: int = Query(default=None),
-    mes: int = Query(default=None),
-    semana: str = Query(default=None),
-    fecha: str = Query(default=None),
-    factura_id: int = Query(default=None),
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    nivel: str = Query(..., max_length=16),
+    anio: int = Query(default=None, ge=1970, le=9999),
+    semestre: int = Query(default=None, ge=1, le=2),
+    trimestre: int = Query(default=None, ge=1, le=4),
+    mes: int = Query(default=None, ge=1, le=12),
+    semana: str = Query(default=None, max_length=10),
+    fecha: str = Query(default=None, max_length=10),
+    factura_id: int = Query(default=None, gt=0),
+    usuario_id: int = Depends(verificar_token),
 ):
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        usuario_id = int(payload.get("sub"))
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+    if nivel not in NIVELES:
+        raise HTTPException(status_code=400, detail="Nivel inválido")
 
     with get_db() as session:
         config = get_config_negocio(session, usuario_id)

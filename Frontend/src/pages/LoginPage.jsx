@@ -1,239 +1,346 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Eye, EyeOff, Loader2, Moon, Package, ShoppingCart, Sparkles, Sun, Users,
+} from "lucide-react";
+
+import { Button } from "../components/ui/Button";
+import { Field, Input } from "../components/ui/Field";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { Package, BarChart3 as BarChart3Icon, Users, Sparkles, Eye, EyeOff, Sun, Moon } from "lucide-react";
+import { useTheme } from "../hooks/useTheme";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
+const CARACTERISTICAS = [
+  { icon: Package, titulo: "Inventario", texto: "Control de stock con alertas automáticas de escasez." },
+  { icon: ShoppingCart, titulo: "Ventas", texto: "Registra ventas y consulta métricas y proyecciones." },
+  { icon: Users, titulo: "Clientes", texto: "Cartera, créditos e historial de compras." },
+  { icon: Sparkles, titulo: "Gesti IA", texto: "Pregúntale a Gesti sobre tu negocio en lenguaje natural." },
+];
+
+const FORM_INICIAL = {
+  usuario: "",
+  password: "",
+  email: "",
+  nombre_negocio: "",
+  tasa_cambio: 36,
+};
+
 export default function LoginPage() {
-  const { login, registro, googleLogin } = useAuth();
+  const { login, registro, googleLogin, user, loading: cargandoSesion } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
-  const googleBtnRef = useRef(null);
-  const [googleReady, setGoogleReady] = useState(false);
+  const [esOscuro, , ciclarTema] = useTheme();
+
+  const [modo, setModo] = useState("login");
+  const [form, setForm] = useState(FORM_INICIAL);
+  const [verPassword, setVerPassword] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+  const [googleListo, setGoogleListo] = useState(false);
+  const refGoogle = useRef(null);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    localStorage.setItem("theme", dark ? "dark" : "light");
-    return () => document.documentElement.classList.remove("dark");
-  }, [dark]);
+    if (!cargandoSesion && user) navigate("/dashboard", { replace: true });
+  }, [user, cargandoSesion, navigate]);
 
+  // Espera a que cargue el script de Google Identity Services.
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
-    let cancelled = false;
-    const checkGoogle = () => {
-      if (cancelled) return;
-      if (window.google?.accounts?.id) {
-        setGoogleReady(true);
-      } else {
-        setTimeout(checkGoogle, 200);
-      }
+    let cancelado = false;
+    (function esperar() {
+      if (cancelado) return;
+      if (window.google?.accounts?.id) setGoogleListo(true);
+      else setTimeout(esperar, 200);
+    })();
+    return () => {
+      cancelado = true;
     };
-    checkGoogle();
-    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    if (!googleReady || !googleBtnRef.current) return;
+    if (!googleListo || !refGoogle.current) return;
+    const contenedor = refGoogle.current;
+
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleResponse,
+      callback: async (respuesta) => {
+        setEnviando(true);
+        setError("");
+        try {
+          await googleLogin(respuesta.credential);
+          navigate("/dashboard", { replace: true });
+        } catch (e) {
+          setError(e.message || "No se pudo iniciar sesión con Google");
+        } finally {
+          setEnviando(false);
+        }
+      },
     });
-    window.google.accounts.id.renderButton(googleBtnRef.current, {
-      theme: "outline",
+
+    window.google.accounts.id.renderButton(contenedor, {
+      theme: esOscuro ? "filled_black" : "outline",
       size: "large",
       text: "continue_with",
       shape: "rectangular",
-      width: googleBtnRef.current.offsetWidth || 320,
+      width: Math.min(contenedor.offsetWidth || 320, 400),
     });
-    return () => {
-      window.google.accounts.id.renderButton(googleBtnRef.current, {
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        shape: "rectangular",
-      });
-    };
-  }, [googleReady, googleBtnRef]);
+  }, [googleListo, esOscuro, googleLogin, navigate]);
 
-  async function handleGoogleResponse(response) {
-    setLoading(true);
-    try {
-      await googleLogin(response.credential);
-      navigate("/dashboard");
-    } catch (err) {
-      setError(err.message || "Error al iniciar sesión con Google");
-    } finally {
-      setLoading(false);
-    }
+  function set(campo, valor) {
+    setForm((f) => ({ ...f, [campo]: valor }));
+    if (error) setError("");
   }
 
-  const [mode, setMode] = useState("login");
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const [form, setForm] = useState({ usuario: "", password: "", email: "", nombre_negocio: "", tasa_cambio: 36 });
-
-  function set(key, val) { setForm(f => ({ ...f, [key]: val })); setError(""); }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setLoading(true);
+  function cambiarModo() {
+    setModo((m) => (m === "login" ? "register" : "login"));
     setError("");
+    setForm(FORM_INICIAL);
+  }
+
+  async function alEnviar(e) {
+    e.preventDefault();
+    setError("");
+
+    if (!form.usuario.trim() || !form.password) {
+      setError("Completa usuario y contraseña");
+      return;
+    }
+    if (modo === "register" && !form.nombre_negocio.trim()) {
+      setError("El nombre del negocio es obligatorio");
+      return;
+    }
+
+    setEnviando(true);
     try {
-      if (mode === "login") {
-        await login(form.usuario, form.password);
-        navigate("/dashboard");
+      if (modo === "login") {
+        await login(form.usuario.trim(), form.password);
       } else {
-        if (!form.nombre_negocio.trim()) { setError("El nombre del negocio es obligatorio"); setLoading(false); return; }
-        await registro(form.usuario, form.password, form.nombre_negocio, Number(form.tasa_cambio), form.email);
-        await login(form.usuario, form.password);
-        navigate("/dashboard");
+        await registro(
+          form.usuario.trim(),
+          form.password,
+          form.nombre_negocio.trim(),
+          Number(form.tasa_cambio) || 36,
+          form.email.trim()
+        );
+        await login(form.usuario.trim(), form.password);
       }
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setEnviando(false);
     }
   }
 
-  const features = [
-    { icon: Package,       title: "Inventario",  desc: "Control de stock en tiempo real con alertas de escasez automáticas." },
-    { icon: BarChart3Icon, title: "Ventas",       desc: "Registra ventas, analiza métricas y proyecciones del negocio." },
-    { icon: Users,         title: "Clientes",     desc: "Gestiona tu cartera, créditos e historial de compras." },
-    { icon: Sparkles,      title: "Gesti IA",     desc: "Consulta a Gesti sobre tu negocio y obtén análisis predictivos." },
-  ];
-
   return (
-    <div className="min-h-screen bg-surface flex relative">
-      <button onClick={() => setDark(v => !v)}
-        className="fixed top-4 right-4 z-50 w-10 h-10 rounded-2xl bg-surface-card border border-border/60 flex items-center justify-center text-content-muted hover:text-content hover:border-content-subtle/30 hover:shadow-glow-sm transition-all duration-200"
-        title={dark ? "Modo claro" : "Modo oscuro"}>
-        {dark ? <Sun size={18} /> : <Moon size={18} />}
+    <div className="min-h-screen bg-surface flex">
+      <button
+        type="button"
+        onClick={ciclarTema}
+        aria-label={esOscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+        className="fixed top-4 right-4 z-50 btn-icon w-10 h-10 rounded-xl bg-surface-card
+                   border border-border shadow-soft hover:shadow-md"
+      >
+        {esOscuro ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
       </button>
 
-      <div className="hidden lg:flex flex-col flex-1 px-16 py-14 justify-between">
+      {/* Panel de presentación (solo escritorio) */}
+      <aside className="hidden lg:flex flex-col flex-1 px-14 xl:px-20 py-14 justify-between border-r border-border">
         <div>
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500 to-secondary-500 flex items-center justify-center font-bold text-white shadow-glow-sm">BG</div>
-            <span className="text-xl font-bold text-content">Bravo's Gest</span>
+          <div className="flex items-center gap-3 mb-14">
+            <div
+              className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center font-bold shadow-glow-sm"
+              style={{ color: "rgb(var(--brand-contrast, 255 255 255))" }}
+              aria-hidden="true"
+            >
+              BG
+            </div>
+            <span className="text-lg font-bold text-content">Bravo's Gest</span>
           </div>
-          <h1 className="text-4xl font-bold text-content leading-tight mb-4">
-            Gestiona tu negocio<br />de forma inteligente.
+
+          <h1 className="text-4xl xl:text-5xl font-bold text-content leading-[1.15] tracking-tight mb-4">
+            Gestiona tu negocio
+            <br />
+            sin perder el control.
           </h1>
-          <p className="text-content-muted text-lg leading-relaxed mb-14 max-w-lg">
-            Inventario, ventas, clientes y análisis con Gesti — todo desde un solo lugar.
+          <p className="text-content-muted text-base leading-relaxed mb-12 max-w-md">
+            Inventario, ventas, clientes y facturación en un solo lugar, con Gesti analizando tus datos.
           </p>
-          <div className="grid grid-cols-1 gap-5 max-w-md">
-            {features.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="flex items-start gap-4 group">
-                <div className="w-11 h-11 rounded-2xl bg-surface-card border border-border/60 flex items-center justify-center shrink-0 transition-all duration-200 group-hover:border-brand-500/30 group-hover:shadow-glow-sm">
-                  <Icon size={18} className="text-brand-400 transition-colors duration-200" />
+
+          <ul className="grid gap-5 max-w-md">
+            {CARACTERISTICAS.map(({ icon: Icon, titulo, texto }) => (
+              <li key={titulo} className="flex items-start gap-3.5">
+                <div className="w-9 h-9 rounded-lg bg-surface-elevated border border-border flex items-center justify-center shrink-0">
+                  <Icon size={17} className="text-brand-600 dark:text-brand-300" aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-content">{title}</p>
-                  <p className="text-sm text-content-muted">{desc}</p>
+                  <p className="text-sm font-semibold text-content">{titulo}</p>
+                  <p className="text-sm text-content-muted">{texto}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-        <p className="text-xs text-content-subtle">© 2026 Bravo's Gest. Todos los derechos reservados.</p>
-      </div>
 
-      <div className="flex flex-col items-center justify-center w-full lg:w-[420px] shrink-0 px-8 py-12 relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-500/[0.03] to-transparent pointer-events-none" />
+        <p className="text-xs text-content-subtle">
+          © {new Date().getFullYear()} Bravo's Gest
+        </p>
+      </aside>
 
-        <div className="flex items-center gap-3 mb-10 lg:hidden relative">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-brand-500 to-secondary-500 flex items-center justify-center font-bold text-white text-sm">BG</div>
+      {/* Formulario */}
+      <div className="flex flex-col items-center justify-center w-full lg:w-[440px] shrink-0 px-6 sm:px-10 py-12">
+        <div className="flex items-center gap-3 mb-9 lg:hidden">
+          <div
+            className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-sm"
+            style={{ color: "rgb(var(--brand-contrast, 255 255 255))" }}
+            aria-hidden="true"
+          >
+            BG
+          </div>
           <span className="text-lg font-bold text-content">Bravo's Gest</span>
         </div>
 
-        <div className="w-full relative">
-          <h2 className="text-2xl font-bold text-content mb-1">
-            {mode === "login" ? "Bienvenido de vuelta" : "Crear una cuenta"}
+        <div className="w-full max-w-sm">
+          <h2 className="text-2xl font-bold text-content tracking-tight">
+            {modo === "login" ? "Bienvenido de vuelta" : "Crea tu cuenta"}
           </h2>
-          <p className="text-content-muted text-sm mb-8">
-            {mode === "login" ? "Ingresa tus credenciales para continuar." : "Completa los datos para registrarte."}
+          <p className="text-sm text-content-muted mt-1.5 mb-7">
+            {modo === "login"
+              ? "Ingresa tus credenciales para continuar."
+              : "Completa los datos para empezar."}
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
+          <form onSubmit={alEnviar} className="space-y-4" noValidate>
+            {modo === "register" && (
               <>
-                <div>
-                  <label className="label">Nombre del negocio</label>
-                  <input className="input" placeholder="Ej: Tienda Los Andes"
-                    value={form.nombre_negocio} onChange={e => set("nombre_negocio", e.target.value)} />
-                </div>
-                <div>
-                  <label className="label">Correo electrónico</label>
-                  <input className="input" type="email" placeholder="ejemplo@correo.com"
-                    value={form.email} onChange={e => set("email", e.target.value)} />
-                </div>
-                <div>
-                  <label className="label">Tasa de cambio (C$ por USD $)</label>
-                  <input className="input" type="number" min="1" step="0.01" placeholder="Ej: 36"
-                    value={form.tasa_cambio} onChange={e => set("tasa_cambio", e.target.value)} />
-                  <p className="text-xs text-content-subtle mt-1">Usada para convertir monedas a dólares automáticamente</p>
-                </div>
+                <Field label="Nombre del negocio" required>
+                  <Input
+                    value={form.nombre_negocio}
+                    onChange={(e) => set("nombre_negocio", e.target.value)}
+                    placeholder="Ej: Tienda Los Andes"
+                    autoComplete="organization"
+                    maxLength={120}
+                  />
+                </Field>
+
+                <Field label="Correo electrónico" hint="Opcional, pero recomendado para recuperar el acceso.">
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => set("email", e.target.value)}
+                    placeholder="ejemplo@correo.com"
+                    autoComplete="email"
+                  />
+                </Field>
+
+                <Field label="Tasa de cambio (C$ por US$)">
+                  <Input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={form.tasa_cambio}
+                    onChange={(e) => set("tasa_cambio", e.target.value)}
+                  />
+                </Field>
               </>
             )}
-            <div>
-              <label className="label">Usuario</label>
-              <input className="input" placeholder="tu_usuario" autoComplete="username"
-                value={form.usuario} onChange={e => set("usuario", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Contraseña</label>
+
+            <Field label="Usuario" required>
+              <Input
+                value={form.usuario}
+                onChange={(e) => set("usuario", e.target.value)}
+                placeholder="tu_usuario"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck="false"
+                maxLength={64}
+              />
+            </Field>
+
+            <Field
+              label="Contraseña"
+              required
+              hint={modo === "register" ? "Mínimo 8 caracteres, con letras y números." : undefined}
+            >
               <div className="relative">
-                <input className="input pr-11" type={showPass ? "text" : "password"}
-                  placeholder="••••••••" autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  value={form.password} onChange={e => set("password", e.target.value)} />
-                <button type="button" onClick={() => setShowPass(v => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-content-muted hover:text-content transition-colors">
-                  {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                <Input
+                  type={verPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => set("password", e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete={modo === "login" ? "current-password" : "new-password"}
+                  className="pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setVerPassword((v) => !v)}
+                  aria-label={verPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 btn-icon"
+                >
+                  {verPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                 </button>
               </div>
-              {mode === "login" && (
-                <button type="button" onClick={() => toast("Contacta al administrador para restablecer tu contraseña.", "info")}
-                  className="text-xs text-content-muted hover:text-content transition-colors mt-1">
-                  ¿Olvidaste tu contraseña?
-                </button>
-              )}
-            </div>
+            </Field>
 
             {error && (
-              <p className="text-sm text-red-400 bg-red-900/15 border border-red-800/40 rounded-xl px-4 py-2.5">{error}</p>
+              <p
+                role="alert"
+                className="text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/25 rounded-lg px-3.5 py-2.5"
+              >
+                {error}
+              </p>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full py-3 text-base mt-3">
-              {loading ? "Cargando..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
-            </button>
+            <Button type="submit" loading={enviando} className="w-full py-3 text-sm mt-1">
+              {modo === "login" ? "Iniciar sesión" : "Crear cuenta"}
+            </Button>
+
+            {modo === "login" && (
+              <button
+                type="button"
+                onClick={() =>
+                  toast("Pide al administrador que restablezca tu contraseña.", "info")
+                }
+                className="text-xs text-content-muted hover:text-content transition-colors w-full text-center"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            )}
           </form>
 
           {GOOGLE_CLIENT_ID && (
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border/60" />
+            <>
+              <div className="relative my-6" aria-hidden="true">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-surface px-3 text-xs text-content-subtle">o continúa con</span>
+                </div>
               </div>
-              <div className="relative flex justify-center">
-                <span className="bg-surface-card px-3 text-xs text-content-muted">O continúa con</span>
+              <div className="flex flex-col items-center gap-2">
+                <div ref={refGoogle} className="flex justify-center min-h-[40px] w-full" />
+                {!googleListo && (
+                  <p className="text-xs text-content-subtle flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                    Cargando Google…
+                  </p>
+                )}
               </div>
-            </div>
-          )}
-
-          {GOOGLE_CLIENT_ID && (
-            <div ref={googleBtnRef} className="flex justify-center min-h-[40px]" />
+            </>
           )}
 
           <p className="text-center text-sm text-content-muted mt-7">
-            {mode === "login" ? "¿No tienes cuenta? " : "¿Ya tienes cuenta? "}
-            <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setForm({ usuario: "", password: "", email: "", nombre_negocio: "" }); }}
-              className="text-brand-400 hover:text-brand-300 font-medium transition-colors">
-              {mode === "login" ? "Regístrate" : "Inicia sesión"}
+            {modo === "login" ? "¿No tienes cuenta? " : "¿Ya tienes cuenta? "}
+            <button
+              type="button"
+              onClick={cambiarModo}
+              className="text-brand-600 dark:text-brand-300 font-medium hover:underline"
+            >
+              {modo === "login" ? "Regístrate" : "Inicia sesión"}
             </button>
           </p>
         </div>

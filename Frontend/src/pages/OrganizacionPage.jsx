@@ -1,289 +1,394 @@
-import { useState, useEffect, useCallback } from "react";
-import { api, fmtMoney, formatHora } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
-import { ChevronRight, Download, ArrowLeft, FolderOpen, FileText, Eye } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowLeft, ChevronRight, Download, Eye, FileText, FolderOpen,
+} from "lucide-react";
 
-const MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-               "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+import { Button, IconButton } from "../components/ui/Button";
+import { Card, EmptyState } from "../components/ui/Card";
+import { Spinner } from "../components/ui/Feedback";
+import { useToast } from "../context/ToastContext";
+import { api, formatHora, fmtMoney } from "../lib/api";
 
-function PeriodCard({ label, ventas, ingresos, onClick, disabled }) {
+const MESES = [
+  "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+const NIVELES = ["anios", "semestres", "trimestres", "meses", "semanas", "dias"];
+
+const ESTADO_INICIAL = {
+  nivel: "anios",
+  anio: null,
+  semestre: null,
+  trimestre: null,
+  mes: null,
+  semana: null,
+  dia: null,
+};
+
+function Cargando() {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`card p-5 text-center flex flex-col items-center gap-2.5 transition-all duration-200 w-full
-        ${disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-surface-hover40 hover:border-border/60 cursor-pointer active:scale-[0.97]"}`}
-    >
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${disabled ? "bg-surface-hover" : "bg-brand-500/10"}`}>
-        <FolderOpen size={28} className={disabled ? "text-content-subtle" : "text-brand-400"} />
-      </div>
-      <p className="text-sm font-semibold text-content">{label}</p>
-      {!disabled ? (
-        <>
-          <p className="text-2xl font-bold text-brand-400">{ventas}</p>
-          <p className="text-xs text-content-muted">{ventas === 1 ? "factura" : "facturas"}</p>
-          {ingresos > 0 && <p className="text-xs text-secondary-400 font-medium">{fmtMoney(ingresos)}</p>}
-        </>
-      ) : (
-        <p className="text-xs text-content-subtle">Sin facturas</p>
-      )}
-    </button>
+    <div className="flex justify-center py-20">
+      <Spinner size={30} />
+    </div>
   );
 }
 
-const getToken = () => sessionStorage.getItem("token") ?? "";
-
 export default function OrganizacionPage() {
-  const { user } = useAuth();
+  const { toast } = useToast();
 
-  const [state, setState] = useState({
-    nivel: "anios", anio: null, semestre: null, trimestre: null, mes: null, semana: null, dia: null,
-  });
+  const [estado, setEstado] = useState(ESTADO_INICIAL);
   const [items, setItems] = useState([]);
   const [facturas, setFacturas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [vistaFacturas, setVistaFacturas] = useState(false);
+  const [cargando, setCargando] = useState(true);
+  const [verFacturas, setVerFacturas] = useState(false);
   const [tituloFacturas, setTituloFacturas] = useState("");
-
-  function getToken() {
-    return sessionStorage.getItem("token") ?? "";
-  }
-
-  async function abrirPDF(url) {
-    const res = await fetch(url, { headers: { Authorization: "Bearer " + getToken() } });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), "_blank");
-  }
-
-  async function descargarPDF(url) {
-    const res = await fetch(url, { headers: { Authorization: "Bearer " + getToken() } });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "factura.pdf";
-    a.click();
-  }
+  const [descargando, setDescargando] = useState(false);
 
   const cargar = useCallback(async () => {
-    setLoading(true);
+    setCargando(true);
     setItems([]);
     try {
       let data;
-      switch (state.nivel) {
+      switch (estado.nivel) {
         case "anios":
           data = await api.get("/organizacion/anios");
-          setItems(data.anios.map(a => ({ key: a.anio, label: String(a.anio), ventas: a.total_ventas, ingresos: a.total_ingresos })));
+          setItems(
+            (data.anios ?? []).map((a) => ({
+              key: a.anio,
+              label: String(a.anio),
+              ventas: a.total_ventas,
+              ingresos: a.total_ingresos,
+            }))
+          );
           break;
         case "semestres":
-          data = await api.get(`/organizacion/${state.anio}/semestres`);
-          setItems(data.semestres.map(s => ({ key: s.semestre, label: s.label, ventas: s.total_ventas, ingresos: s.total_ingresos })));
+          data = await api.get(`/organizacion/${estado.anio}/semestres`);
+          setItems(
+            (data.semestres ?? []).map((s) => ({
+              key: s.semestre,
+              label: s.label,
+              ventas: s.total_ventas,
+              ingresos: s.total_ingresos,
+            }))
+          );
           break;
         case "trimestres":
-          data = await api.get(`/organizacion/${state.anio}/${state.semestre}/trimestres`);
-          setItems(data.trimestres.map(t => ({ key: t.trimestre, label: t.label, ventas: t.total_ventas, ingresos: t.total_ingresos })));
+          data = await api.get(`/organizacion/${estado.anio}/${estado.semestre}/trimestres`);
+          setItems(
+            (data.trimestres ?? []).map((t) => ({
+              key: t.trimestre,
+              label: t.label,
+              ventas: t.total_ventas,
+              ingresos: t.total_ingresos,
+            }))
+          );
           break;
         case "meses":
-          data = await api.get(`/organizacion/${state.anio}/${state.trimestre}/meses`);
-          setItems(data.meses.map(m => ({ key: m.mes, label: m.label, ventas: m.total_ventas, ingresos: m.total_ingresos })));
+          data = await api.get(`/organizacion/${estado.anio}/${estado.trimestre}/meses`);
+          setItems(
+            (data.meses ?? []).map((m) => ({
+              key: m.mes,
+              label: m.label,
+              ventas: m.total_ventas,
+              ingresos: m.total_ingresos,
+            }))
+          );
           break;
         case "semanas":
-          data = await api.get(`/organizacion/${state.anio}/${state.mes}/semanas`);
-          setItems(data.semanas.map(s => ({ key: s.inicio_semana, label: s.label, ventas: s.total_ventas, ingresos: s.total_ingresos })));
+          data = await api.get(`/organizacion/${estado.anio}/${estado.mes}/semanas`);
+          setItems(
+            (data.semanas ?? []).map((s) => ({
+              key: s.inicio_semana,
+              label: s.label,
+              ventas: s.total_ventas,
+              ingresos: s.total_ingresos,
+            }))
+          );
           break;
         case "dias":
-          data = await api.get(`/organizacion/${state.anio}/${state.mes}/${state.semana}/dias`);
-          setItems(data.dias.map(d => ({ key: d.fecha, label: d.label, ventas: d.total_ventas, ingresos: d.total_ingresos })));
+          data = await api.get(`/organizacion/${estado.anio}/${estado.mes}/${estado.semana}/dias`);
+          setItems(
+            (data.dias ?? []).map((d) => ({
+              key: d.fecha,
+              label: d.label,
+              ventas: d.total_ventas,
+              ingresos: d.total_ingresos,
+            }))
+          );
+          break;
+        default:
           break;
       }
-    } catch(e) { console.error(e); }
-    finally { setLoading(false); }
-  }, [state.nivel, state.anio, state.semestre, state.trimestre, state.mes, state.semana]);
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setCargando(false);
+    }
+  }, [estado, toast]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
-  function drillDown(item) {
-    const siguiente = {
-      anios: "semestres", semestres: "trimestres", trimestres: "meses",
-      meses: "semanas", semanas: "dias", dias: "facturas",
-    };
-    const campo = {
-      anios: "anio", semestres: "semestre", trimestres: "trimestre",
-      meses: "mes", semanas: "semana",
-    };
-    if (state.nivel === "dias") {
-      verFacturas(item.key, item.label);
+  function bajarNivel(item) {
+    if (estado.nivel === "dias") {
+      abrirFacturasDelDia(item.key, item.label);
       return;
     }
-    setState(s => ({ ...s, nivel: siguiente[s.nivel], [campo[s.nivel]]: item.key }));
+    const siguiente = NIVELES[NIVELES.indexOf(estado.nivel) + 1];
+    const campo = {
+      anios: "anio",
+      semestres: "semestre",
+      trimestres: "trimestre",
+      meses: "mes",
+      semanas: "semana",
+    }[estado.nivel];
+    setEstado((s) => ({ ...s, nivel: siguiente, [campo]: item.key }));
   }
 
-  async function verFacturas(fecha, label) {
-    setVistaFacturas(true);
-    setTituloFacturas("Facturas del " + label);
+  async function abrirFacturasDelDia(fecha, label) {
+    setVerFacturas(true);
+    setTituloFacturas(`Facturas del ${label}`);
     setFacturas([]);
     try {
       const data = await api.get(`/organizacion/dia/${fecha}`);
       setFacturas(data.facturas ?? []);
-    } catch(e) { console.error(e); }
-    setState(s => ({ ...s, dia: fecha }));
+    } catch (e) {
+      toast(e.message, "error");
+    }
+    setEstado((s) => ({ ...s, dia: fecha }));
   }
 
-  function navegarA(nivel) {
-    const NIVELES = ["anios", "semestres", "trimestres", "meses", "semanas", "dias"];
-    const idx = NIVELES.indexOf(nivel);
-    setVistaFacturas(false);
-    setState(s => ({
-      ...s, nivel,
-      anio:      idx < 1 ? null : s.anio,
-      semestre:  idx < 2 ? null : s.semestre,
-      trimestre: idx < 3 ? null : s.trimestre,
-      mes:       idx < 4 ? null : s.mes,
-      semana:    idx < 5 ? null : s.semana,
-      dia:       null,
+  function volverA(nivel) {
+    const indice = NIVELES.indexOf(nivel);
+    setVerFacturas(false);
+    setEstado((s) => ({
+      ...s,
+      nivel,
+      anio: indice < 1 ? null : s.anio,
+      semestre: indice < 2 ? null : s.semestre,
+      trimestre: indice < 3 ? null : s.trimestre,
+      mes: indice < 4 ? null : s.mes,
+      semana: indice < 5 ? null : s.semana,
+      dia: null,
     }));
   }
 
-  function urlDescargar(nivel, extra = {}) {
-    const p = new URLSearchParams({ nivel, usuario: user?.usuario ?? "root", ...extra });
-    if (state.anio)     p.set("anio",      state.anio);
-    if (state.semestre) p.set("semestre",  state.semestre);
-    if (state.trimestre)p.set("trimestre", state.trimestre);
-    if (state.mes)      p.set("mes",       state.mes);
-    if (state.semana)   p.set("semana",    state.semana);
-    return `${api.baseUrl}/organizacion/descargar?${p.toString()}`;
+  /**
+   * URL de descarga del periodo actual.
+   *
+   * Antes esto se usaba en un `<a href>`: el token va en la cabecera
+   * Authorization y un enlace no la envía, así que siempre daba 401.
+   */
+  function urlDescarga(nivel, extra = {}) {
+    const p = new URLSearchParams({ nivel });
+    const campos = { anio: estado.anio, semestre: estado.semestre, trimestre: estado.trimestre, mes: estado.mes, semana: estado.semana };
+    Object.entries({ ...campos, ...extra }).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== "") p.set(k, v);
+    });
+    return `/organizacion/descargar?${p.toString()}`;
   }
 
-  const crumbs = [{ label: "Inicio", nivel: "anios" }];
-  if (state.anio)      crumbs.push({ label: String(state.anio),                          nivel: "semestres" });
-  if (state.semestre)  crumbs.push({ label: "H" + state.semestre,                        nivel: "trimestres" });
-  if (state.trimestre) crumbs.push({ label: "Q" + state.trimestre,                       nivel: "meses" });
-  if (state.mes)       crumbs.push({ label: MESES[state.mes] ?? "Mes",                   nivel: "semanas" });
-  if (state.semana) {
-    const partes = String(state.semana).split("-");
-    crumbs.push({ label: `Semana ${partes[2]}/${partes[1]}`,                             nivel: "dias" });
+  async function descargar(url, nombre) {
+    setDescargando(true);
+    try {
+      await api.descargar(url, nombre);
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setDescargando(false);
+    }
   }
-  if (state.dia) {
-    const d = new Date(state.dia + "T12:00:00");
-    const dias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
-    const p = String(state.dia).split("-");
-    crumbs.push({ label: `${dias[d.getDay()]} ${p[2]}/${p[1]}`,                          nivel: "facturas" });
+
+  async function verPdf(id) {
+    try {
+      await api.abrir(`/facturas/${id}`);
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  }
+
+  const migas = [{ label: "Inicio", nivel: "anios" }];
+  if (estado.anio) migas.push({ label: String(estado.anio), nivel: "semestres" });
+  if (estado.semestre) migas.push({ label: `H${estado.semestre}`, nivel: "trimestres" });
+  if (estado.trimestre) migas.push({ label: `Q${estado.trimestre}`, nivel: "meses" });
+  if (estado.mes) migas.push({ label: MESES[estado.mes] ?? "Mes", nivel: "semanas" });
+  if (estado.semana) {
+    const [, m, d] = String(estado.semana).split("-");
+    migas.push({ label: `Semana ${d}/${m}`, nivel: "dias" });
+  }
+  if (estado.dia) {
+    const [, m, d] = String(estado.dia).split("-");
+    migas.push({ label: `${d}/${m}`, nivel: "facturas" });
   }
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <div>
-          <h1>Organización de Facturas</h1>
-          <p>Navega y descarga facturas por período</p>
+          <h1>Organización de facturas</h1>
+          <p>Navega por año, semestre, mes y día para descargar tus facturas.</p>
         </div>
-        {!vistaFacturas && state.nivel !== "anios" && (
-          <a href={urlDescargar("anio")} target="_blank" rel="noreferrer"
-            className="btn-secondary flex items-center gap-2 text-sm">
-            <Download size={15} /> Descargar nivel
-          </a>
+        {!verFacturas && estado.nivel !== "anios" && (
+          <Button
+            variant="secondary"
+            icon={Download}
+            loading={descargando}
+            onClick={() => descargar(urlDescarga("anio"), `facturas_${estado.anio}.zip`)}
+          >
+            Descargar {estado.anio}
+          </Button>
         )}
       </div>
 
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 flex-wrap text-sm">
-        {crumbs.map((c, i) => (
-          <span key={i} className="flex items-center gap-1.5">
-            {i > 0 && <ChevronRight size={14} className="text-content-subtle/60" />}
-            {i === crumbs.length - 1 ? (
-              <span className="text-content font-medium bg-surface-card px-3 py-1.5 rounded-xl border border-border/40">{c.label}</span>
+      <nav aria-label="Ruta de navegación" className="flex items-center gap-1 flex-wrap text-sm">
+        {migas.map((m, i) => (
+          <span key={`${m.nivel}-${i}`} className="flex items-center gap-1">
+            {i > 0 && <ChevronRight size={14} className="text-content-subtle" aria-hidden="true" />}
+            {i === migas.length - 1 ? (
+              <span className="px-2.5 py-1 rounded-md bg-surface-card border border-border text-content font-medium">
+                {m.label}
+              </span>
             ) : (
-              <button onClick={() => navegarA(c.nivel)}
-                className="text-brand-400 hover:text-brand-300 transition-colors px-2 py-1 hover:bg-brand-500/5 rounded-lg">
-                {c.label}
+              <button
+                type="button"
+                onClick={() => volverA(m.nivel)}
+                className="px-2 py-1 rounded-md text-brand-600 dark:text-brand-300 hover:bg-brand-500/10 transition-colors"
+              >
+                {m.label}
               </button>
             )}
           </span>
         ))}
       </nav>
 
-      {/* Vista de facturas */}
-      {vistaFacturas ? (
+      {verFacturas ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-content">{tituloFacturas}</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-content">{tituloFacturas}</h2>
             <div className="flex gap-2">
-              <a href={urlDescargar("dia", { fecha: state.dia })} target="_blank" rel="noreferrer"
-                className="btn-secondary flex items-center gap-2 text-sm">
-                <Download size={15} /> Descargar todo
-              </a>
-              <button onClick={() => { setVistaFacturas(false); setState(s => ({ ...s, dia: null })); }}
-                className="btn-ghost flex items-center gap-2 text-sm">
-                <ArrowLeft size={15} /> Volver
-              </button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
+                loading={descargando}
+                onClick={() => descargar(urlDescarga("dia", { fecha: estado.dia }), `facturas_${estado.dia}.zip`)}
+              >
+                Descargar todo
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={ArrowLeft}
+                onClick={() => {
+                  setVerFacturas(false);
+                  setEstado((s) => ({ ...s, dia: null }));
+                }}
+              >
+                Volver
+              </Button>
             </div>
           </div>
 
-          <div className="table-container">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <th className="th">#</th>
-                    <th className="th">Cliente</th>
-                    <th className="th text-right">Total</th>
-                    <th className="th hidden sm:table-cell">Hora</th>
-                    <th className="th hidden sm:table-cell">Método</th>
-                    <th className="th text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {facturas.length === 0 ? (
-                    <tr><td colSpan={6} className="td text-center text-content-subtle py-8">Sin facturas para este día</td></tr>
-                  ) : facturas.map((f, i) => (
-                    <tr key={f.id} className="table-row">
-                      <td className="td text-content-subtle">{f.id}</td>
-                      <td className="td font-medium text-content">{f.cliente_nombre ?? "—"}</td>
-                      <td className="td text-right font-semibold text-brand-400">{fmtMoney(f.total)}</td>
-                      <td className="td hidden sm:table-cell text-content-muted">{formatHora(f.fecha_hora)}</td>
-                      <td className="td hidden sm:table-cell"><span className="badge-blue">{f.metodo_pago}</span></td>
-                      <td className="td">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => abrirPDF(`${api.baseUrl}/facturas/${f.id}`)}
-                            className="btn-ghost p-1.5 text-brand-400 hover:text-brand-300" title="Ver factura">
-                            <Eye size={14} />
-                          </button>
-                          <button onClick={() => descargarPDF(`${api.baseUrl}/organizacion/descargar?nivel=factura&factura_id=${f.id}`)}
-                            className="btn-ghost p-1.5 text-secondary-400 hover:text-secondary-300" title="Descargar">
-                            <Download size={14} />
-                          </button>
-                        </div>
-                      </td>
+          <Card className="overflow-hidden">
+            {facturas.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="Sin facturas este día"
+                text="No se registraron ventas en esta fecha."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th className="th">Factura</th>
+                      <th className="th">Cliente</th>
+                      <th className="th text-right">Total</th>
+                      <th className="th hidden sm:table-cell">Hora</th>
+                      <th className="th hidden sm:table-cell">Método</th>
+                      <th className="th text-right">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  </thead>
+                  <tbody>
+                    {facturas.map((f) => (
+                      <tr key={f.id} className="table-row">
+                        <td className="td font-mono text-xs text-content-muted">#{f.id}</td>
+                        <td className="td font-medium max-w-[12rem] truncate">
+                          {f.cliente_nombre || "Consumidor final"}
+                        </td>
+                        <td className="td text-right font-semibold tabular">{fmtMoney(f.total)}</td>
+                        <td className="td hidden sm:table-cell text-content-muted">
+                          {formatHora(f.fecha_hora)}
+                        </td>
+                        <td className="td hidden sm:table-cell text-content-muted">{f.metodo_pago}</td>
+                        <td className="td">
+                          <div className="flex items-center justify-end gap-0.5">
+                            <IconButton label="Ver PDF" icon={Eye} onClick={() => verPdf(f.id)} />
+                            <IconButton
+                              label="Descargar PDF"
+                              icon={Download}
+                              onClick={() =>
+                                descargar(
+                                  `/organizacion/descargar?nivel=factura&factura_id=${f.id}`,
+                                  `factura_${f.id}.pdf`
+                                )
+                              }
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         </div>
-      ) : loading ? (
-        <div className="flex justify-center py-20">
-          <div className="w-9 h-9 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+      ) : cargando ? (
+        <Cargando />
       ) : items.length === 0 ? (
-        <div className="empty-state">
-          <FileText size={44} />
-          <p>No hay facturas en este período.</p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="Sin facturas en este período"
+          text="Registra ventas para que se generen las facturas."
+        />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {items.map(item => (
-            <PeriodCard
-              key={item.key}
-              label={item.label}
-              ventas={item.ventas}
-              ingresos={item.ingresos}
-              disabled={item.ventas === 0}
-              onClick={() => item.ventas > 0 && drillDown(item)}
-            />
-          ))}
-        </div>
+        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {items.map((item) => {
+            const vacio = item.ventas === 0;
+            return (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  disabled={vacio}
+                  onClick={() => bajarNivel(item)}
+                  className={`w-full card-hover p-4 text-left flex flex-col gap-2 ${
+                    vacio ? "opacity-45 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <FolderOpen
+                      size={20}
+                      className={vacio ? "text-content-subtle" : "text-brand-500 dark:text-brand-300"}
+                      aria-hidden="true"
+                    />
+                    {!vacio && (
+                      <span className="badge-blue">{item.ventas}</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold text-content truncate">{item.label}</p>
+                  {vacio ? (
+                    <p className="text-xs text-content-subtle">Sin facturas</p>
+                  ) : (
+                    <p className="text-xs text-content-muted tabular">{fmtMoney(item.ingresos)}</p>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

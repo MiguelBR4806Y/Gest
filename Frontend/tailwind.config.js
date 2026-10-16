@@ -42,32 +42,46 @@ export default {
           900: "rgb(var(--accent-900) / <alpha-value>)",
         },
         surface: {
-          DEFAULT: "rgb(var(--surface) / <alpha-value>)",
-          card: "rgb(var(--surface-card) / <alpha-value>)",
+          DEFAULT:  "rgb(var(--surface) / <alpha-value>)",
+          card:     "rgb(var(--surface-card) / <alpha-value>)",
           elevated: "rgb(var(--surface-elevated) / <alpha-value>)",
-          hover: "rgb(var(--surface-hover) / <alpha-value>)",
+          sunken:   "rgb(var(--surface-sunken) / <alpha-value>)",
+          // Sin <alpha-value>: la variable ya trae su propio alfa (rgb(0 0 0 / 0.04)).
+          // Antes llevaba /<alpha-value> y el resultado era CSS inválido, así que
+          // la clase no hacía nada.
+          hover:    "rgb(var(--surface-hover))",
         },
         content: {
           DEFAULT: "rgb(var(--on-surface) / <alpha-value>)",
-          muted: "rgb(var(--on-muted) / <alpha-value>)",
-          subtle: "rgb(var(--on-subtle) / <alpha-value>)",
+          muted:   "rgb(var(--on-muted) / <alpha-value>)",
+          subtle:  "rgb(var(--on-subtle) / <alpha-value>)",
         },
         border: {
           DEFAULT: "rgb(var(--border-default) / <alpha-value>)",
+          strong:  "rgb(var(--border-strong) / <alpha-value>)",
         },
+        ring: "rgb(var(--ring) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+      },
+      borderRadius: {
+        md: "calc(0.625rem - 2px)",
       },
       boxShadow: {
         soft: "var(--shadow-soft)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
         glow: "var(--shadow-glow)",
         "glow-sm": "var(--shadow-glow-sm)",
       },
+      transitionProperty: {
+        size: "width, height",
+      },
       animation: {
-        "fade-in": "fadeIn 0.3s ease-out",
-        "slide-up": "slideUp 0.3s ease-out",
-        "pulse-soft": "pulseSoft 2s ease-in-out infinite",
+        "fade-in": "fadeIn 0.25s ease-out",
+        "slide-up": "slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+        "scale-in": "scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
       },
       keyframes: {
         fadeIn: {
@@ -75,12 +89,12 @@ export default {
           "100%": { opacity: "1" },
         },
         slideUp: {
-          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        pulseSoft: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0.7" },
+        scaleIn: {
+          "0%": { opacity: "0", transform: "scale(0.97)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
         },
       },
     },

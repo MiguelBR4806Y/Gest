@@ -6,16 +6,18 @@
   * { box-sizing: border-box; }
 
   :root {
-    --brand-50: 248 246 244;
-    --brand-100: 240 237 233;
-    --brand-200: 228 223 217;
-    --brand-300: 215 209 202;
-    --brand-400: 200 192 184;
-    --brand-500: 185 175 165;
-    --brand-600: 165 153 142;
-    --brand-700: 142 130 118;
-    --brand-800: 118 106 95;
-    --brand-900: 92 82 72;
+    /* Escala de acento. En runtime se sobrescribe con el color del negocio
+       (ver src/lib/color.js); estos son los valores por defecto. */
+    --brand-50: 240 249 247;
+    --brand-100: 209 238 233;
+    --brand-200: 168 221 213;
+    --brand-300: 122 200 190;
+    --brand-400: 82 178 167;
+    --brand-500: 52 152 141;
+    --brand-600: 38 124 115;
+    --brand-700: 28 98 91;
+    --brand-800: 20 74 69;
+    --brand-900: 13 51 47;
 
     --secondary-50: 240 250 245;
     --secondary-100: 220 242 230;
@@ -23,222 +25,245 @@
     --secondary-300: 155 215 185;
     --secondary-400: 125 200 165;
     --secondary-500: 72 180 130;
-    --secondary-600: 55 155 110;
-    --secondary-700: 40 128 88;
-    --secondary-800: 28 100 66;
-    --secondary-900: 18 72 46;
+    --secondary-600: 45 145 100;
+    --secondary-700: 32 115 78;
+    --secondary-800: 22 88 59;
+    --secondary-900: 14 62 41;
 
-    --accent-50: 236 248 245;
-    --accent-100: 208 240 233;
-    --accent-200: 178 230 219;
-    --accent-300: 148 220 206;
-    --accent-400: 108 200 182;
-    --accent-500: 70 165 150;
-    --accent-600: 52 142 128;
-    --accent-700: 38 118 105;
-    --accent-800: 26 92 80;
-    --accent-900: 16 66 57;
+    --accent-50: 253 247 237;
+    --accent-100: 250 236 214;
+    --accent-200: 244 216 168;
+    --accent-300: 236 193 116;
+    --accent-400: 226 168 68;
+    --accent-500: 212 145 34;
+    --accent-600: 180 118 24;
+    --accent-700: 144 92 19;
+    --accent-800: 110 69 15;
+    --accent-900: 78 48 11;
 
-    --surface: 239 237 234;
-    --surface-card: 254 253 252;
-    --surface-elevated: 232 230 227;
+    --surface: 248 247 246;
+    --surface-card: 255 255 255;
+    --surface-elevated: 250 249 248;
     --surface-hover: 0 0 0 / 0.04;
+    --surface-sunken: 241 240 238;
 
-    --on-surface: 35 32 30;
-    --on-muted: 85 80 75;
-    --on-subtle: 135 130 125;
+    --on-surface: 28 26 25;
+    --on-muted: 88 83 78;
+    --on-subtle: 128 122 116;
 
-    --border-default: 220 215 210;
+    --border-default: 228 224 219;
+    --border-strong: 205 199 192;
 
-    --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.08), 0 0 6px -2px rgba(0, 0, 0, 0.02);
-    --shadow-glow: 0 0 20px rgba(108, 200, 182, 0.15);
-    --shadow-glow-sm: 0 0 12px rgba(108, 200, 182, 0.1);
+    --ring: 52 152 141;
+
+    --shadow-soft: 0 1px 2px rgba(20, 16, 12, 0.04), 0 4px 12px -4px rgba(20, 16, 12, 0.08);
+    --shadow-md: 0 2px 4px rgba(20, 16, 12, 0.04), 0 8px 24px -8px rgba(20, 16, 12, 0.12);
+    --shadow-lg: 0 4px 8px rgba(20, 16, 12, 0.05), 0 20px 40px -12px rgba(20, 16, 12, 0.18);
+    --shadow-glow: 0 0 0 1px rgb(var(--brand-500) / 0.15), 0 8px 24px -8px rgb(var(--brand-500) / 0.35);
+    --shadow-glow-sm: 0 4px 12px -4px rgb(var(--brand-500) / 0.3);
   }
 
   .dark {
-    --brand-50: 237 244 250;
-    --brand-100: 212 230 243;
-    --brand-200: 169 204 231;
-    --brand-300: 125 179 219;
-    --brand-400: 95 159 210;
-    --brand-500: 66 141 199;
-    --brand-600: 53 113 168;
-    --brand-700: 40 88 137;
-    --brand-800: 27 63 106;
-    --brand-900: 14 38 75;
-
     --secondary-50: 234 245 245;
     --secondary-100: 206 233 232;
     --secondary-200: 157 210 209;
     --secondary-300: 108 188 186;
-    --secondary-400: 77 165 163;
-    --secondary-500: 45 133 131;
-    --secondary-600: 36 110 108;
-    --secondary-700: 27 87 85;
-    --secondary-800: 18 64 62;
-    --secondary-900: 9 41 39;
+    --secondary-400: 77 190 170;
+    --secondary-500: 52 170 150;
+    --secondary-600: 40 140 124;
+    --secondary-700: 30 110 96;
+    --secondary-800: 20 82 71;
+    --secondary-900: 12 56 48;
 
-    --accent-50: 249 244 232;
-    --accent-100: 242 231 200;
-    --accent-200: 229 207 146;
-    --accent-300: 216 184 92;
-    --accent-400: 209 173 78;
-    --accent-500: 204 162 65;
-    --accent-600: 173 136 54;
-    --accent-700: 142 110 43;
-    --accent-800: 111 84 32;
-    --accent-900: 80 58 21;
+    --accent-50: 254 249 236;
+    --accent-100: 252 240 205;
+    --accent-200: 247 224 152;
+    --accent-300: 240 205 99;
+    --accent-400: 232 185 62;
+    --accent-500: 214 162 34;
+    --accent-600: 180 133 24;
+    --accent-700: 146 105 19;
+    --accent-800: 112 78 15;
+    --accent-900: 82 55 11;
 
-    --surface: 13 17 23;
-    --surface-card: 22 27 34;
-    --surface-elevated: 22 27 34;
-    --surface-hover: 255 255 255 / 0.04;
+    --surface: 15 18 22;
+    --surface-card: 24 28 33;
+    --surface-elevated: 31 36 42;
+    --surface-hover: 255 255 255 / 0.045;
+    --surface-sunken: 11 14 17;
 
-    --on-surface: 243 244 246;
-    --on-muted: 156 163 175;
-    --on-subtle: 107 114 128;
+    --on-surface: 240 242 245;
+    --on-muted: 158 166 176;
+    --on-subtle: 108 117 128;
 
-    --border-default: 31 41 55;
+    --border-default: 39 45 53;
+    --border-strong: 56 64 74;
 
-    --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.3), 0 0 6px -2px rgba(0, 0, 0, 0.05);
-    --shadow-glow: 0 0 20px rgba(66, 141, 199, 0.15);
-    --shadow-glow-sm: 0 0 12px rgba(66, 141, 199, 0.1);
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px -4px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 20px 40px -12px rgba(0, 0, 0, 0.6);
   }
 
   body {
     @apply bg-surface text-content font-sans antialiased;
   }
+
+  /* Foco visible en todo lo interactivo: antes no había ninguno, así que era
+     imposible navegar con teclado. */
+  :where(a, button, [role="button"], summary):focus-visible {
+    outline: 2px solid rgb(var(--ring));
+    outline-offset: 2px;
+  }
+  :where(input, select, textarea) {
+    outline: none;
+  }
+
   ::selection {
     @apply bg-brand-500/30 text-content;
   }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { @apply bg-surface; }
-  ::-webkit-scrollbar-thumb { @apply bg-content-subtle/30 rounded-full hover:bg-content-muted/40; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--on-subtle) / 0.35);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--on-muted) / 0.55); }
+
+  /* Las animaciones de aurora corren en bucle infinito; hay que poder apagarlas. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+    .aurora-blob { animation: none !important; }
+  }
 }
 
 @layer components {
   .card {
-    @apply bg-surface-card border border-border rounded-2xl shadow-soft;
+    @apply bg-surface-card border border-border rounded-xl shadow-soft;
   }
   .card-flat {
-    @apply bg-surface-elevated border border-border/50 rounded-2xl;
+    @apply bg-surface-elevated border border-border/60 rounded-xl;
   }
   .card-hover {
-    @apply card transition-all duration-200 hover:border-content-subtle/30 hover:shadow-glow-sm;
+    @apply card transition-[border-color,box-shadow] duration-200 hover:border-border-strong hover:shadow-md;
   }
   .card-gradient {
     @apply card relative overflow-hidden;
   }
   .card-gradient::before {
     content: '';
-    @apply absolute inset-0 opacity-[0.06] pointer-events-none;
+    @apply absolute inset-0 opacity-[0.05] pointer-events-none;
     background: radial-gradient(ellipse at top left, rgb(var(--brand-500)), transparent 70%),
                 radial-gradient(ellipse at bottom right, rgb(var(--secondary-500)), transparent 70%);
   }
 
+  /* ── Botones ── */
+  .btn-base {
+    @apply inline-flex items-center justify-center gap-2 font-medium rounded-lg
+           transition-[background-color,border-color,box-shadow,transform] duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none
+           active:scale-[0.98] select-none whitespace-nowrap;
+  }
   .btn-primary {
-    @apply bg-brand-600 hover:bg-brand-500 text-white font-medium px-5 py-2.5 rounded-lg
-           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
-           shadow-glow-sm hover:shadow-glow active:scale-[0.97];
+    @apply btn-base bg-brand-600 hover:bg-brand-500 px-4 py-2.5
+           shadow-glow-sm hover:shadow-glow;
+    color: rgb(var(--brand-contrast, 255 255 255));
   }
   .btn-secondary {
-    @apply bg-surface-hover hover:bg-content-subtle/15 text-content font-medium px-5 py-2.5 rounded-lg
-           transition-all duration-200 border border-border hover:border-content-subtle/30 active:scale-[0.97];
+    @apply btn-base bg-surface-card hover:bg-surface-hover text-content px-4 py-2.5
+           border border-border hover:border-border-strong;
   }
   .btn-danger {
-    @apply bg-red-900/20 hover:bg-red-800/30 text-red-400 font-medium px-5 py-2.5 rounded-lg
-           transition-all duration-200 border border-red-800/20 hover:border-red-700/30 active:scale-[0.97];
+    @apply btn-base bg-red-600 hover:bg-red-500 text-white px-4 py-2.5;
   }
   .btn-ghost {
-    @apply hover:bg-surface-hover text-content-muted hover:text-content px-3 py-2 rounded-lg
-           transition-all duration-200;
+    @apply btn-base text-content-muted hover:text-content hover:bg-surface-hover px-3 py-2;
+  }
+  .btn-sm { @apply text-xs px-3 py-2 rounded-md; }
+  .btn-icon {
+    @apply btn-base w-8 h-8 rounded-md text-content-muted hover:text-content hover:bg-surface-hover;
   }
 
+  /* ── Formularios ── */
   .input {
-    @apply bg-surface border border-border text-content rounded-lg px-4 py-2.5 w-full
-           focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60
-           placeholder:text-content-subtle transition-all duration-200;
+    @apply bg-surface-card border border-border text-content rounded-lg px-3.5 py-2.5 w-full
+           placeholder:text-content-subtle transition-[border-color,box-shadow] duration-150
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25
+           disabled:opacity-60 disabled:cursor-not-allowed;
   }
-  .label {
-    @apply block text-sm font-medium text-content-muted mb-1.5 tracking-wide;
+  .input-error {
+    @apply border-red-500/60 focus:border-red-500 focus:ring-red-500/25;
   }
+  .label { @apply block text-sm font-medium text-content-muted mb-1.5; }
+  .field-hint { @apply text-xs text-content-subtle mt-1.5; }
+  .field-error { @apply text-xs text-red-500 dark:text-red-400 mt-1.5; }
 
+  /* ── Badges ── */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium
+           border whitespace-nowrap;
   }
-  .badge-green {
-    @apply badge bg-secondary-900/40 text-secondary-600 dark:text-secondary-400 border border-secondary-700/30;
-  }
-  .badge-red {
-    @apply badge bg-red-900/20 text-red-600 dark:text-red-400 border border-red-800/20;
-  }
-  .badge-yellow {
-    @apply badge bg-accent-900/20 text-accent-700 dark:text-accent-400 border border-accent-800/20;
-  }
-  .badge-blue {
-    @apply badge bg-brand-900/20 text-brand-700 dark:text-brand-400 border border-brand-800/20;
-  }
+  .badge-green   { @apply badge bg-secondary-500/10 text-secondary-700 dark:text-secondary-400 border-secondary-500/25; }
+  .badge-red     { @apply badge bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/25; }
+  .badge-yellow  { @apply badge bg-accent-500/10 text-accent-700 dark:text-accent-400 border-accent-500/25; }
+  .badge-blue    { @apply badge bg-brand-500/10 text-brand-700 dark:text-brand-300 border-brand-500/25; }
+  .badge-neutral { @apply badge bg-surface-elevated text-content-muted border-border; }
 
+  /* ── Tablas ── */
   .table-container {
-    @apply bg-surface-elevated border border-border/50 rounded-2xl overflow-hidden;
+    @apply bg-surface-card border border-border rounded-xl overflow-hidden;
   }
-  .table-container table {
-    @apply w-full;
-  }
-  .table-container thead {
-    @apply border-b border-border;
-  }
+  .table-container table { @apply w-full border-collapse; }
+  .table-container thead { @apply bg-surface-elevated/60 border-b border-border; }
   .th {
-    @apply text-xs font-semibold text-content-subtle uppercase tracking-wider px-4 py-3 text-left;
+    @apply text-xs font-semibold text-content-subtle uppercase tracking-wide px-4 py-3 text-left;
   }
-  .td {
-    @apply px-4 py-3 text-sm text-content;
-  }
+  .td { @apply px-4 py-3 text-sm text-content align-middle; }
   .table-row {
-    @apply border-b border-border/50 transition-all duration-150 hover:bg-surface-hover;
+    @apply border-b border-border/60 transition-colors duration-100 hover:bg-surface-hover;
   }
-  .table-row:last-child {
-    @apply border-b-0;
-  }
+  .table-row:last-child { @apply border-b-0; }
 
-  .metric-card {
-    @apply card-gradient p-6 flex items-start gap-4;
-  }
-  .metric-icon {
-    @apply w-11 h-11 rounded-2xl flex items-center justify-center shrink-0;
-  }
+  /* ── Métricas ── */
+  .metric-card { @apply card p-5 flex items-start gap-4; }
+  .metric-icon { @apply w-10 h-10 rounded-lg flex items-center justify-center shrink-0; }
+  .metric-value { @apply text-xl font-bold text-content leading-tight; }
+  .metric-label { @apply text-xs font-medium text-content-muted; }
 
-  .card-accent {
-    @apply card relative overflow-hidden;
-  }
-  .card-accent::before {
-    content: '';
-    @apply absolute top-0 left-0 right-0 h-0.5 bg-accent-500;
-  }
+  .section-title { @apply text-sm font-semibold text-content; }
 
-  .section-title {
-    @apply text-base font-semibold text-content;
-  }
-
-  .page-header {
-    @apply flex flex-col sm:flex-row sm:items-center justify-between gap-3;
-  }
-  .page-header h1 {
-    @apply text-2xl font-bold text-content;
-  }
-  .page-header p {
-    @apply text-sm text-content-muted mt-0.5;
-  }
+  .page-header { @apply flex flex-col sm:flex-row sm:items-center justify-between gap-3; }
+  .page-header h1 { @apply text-2xl font-bold text-content tracking-tight; }
+  .page-header p  { @apply text-sm text-content-muted mt-1; }
 
   .empty-state {
-    @apply flex flex-col items-center justify-center py-16 gap-4 text-content-subtle;
+    @apply flex flex-col items-center justify-center py-14 px-6 gap-3 text-center;
   }
-  .empty-state svg {
-    @apply opacity-40;
+  .empty-state-title { @apply text-sm font-medium text-content; }
+  .empty-state-text  { @apply text-xs text-content-subtle max-w-sm; }
+
+  /* ── Navegación ── */
+  .nav-item {
+    @apply relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           transition-colors duration-150;
   }
+  .nav-item-active { @apply bg-brand-500/10 text-brand-700 dark:text-brand-300 font-semibold; }
+  .nav-item-idle   { @apply text-content-muted hover:text-content hover:bg-surface-hover; }
+
+  /* ── Esqueletos de carga ── */
+  .skeleton { @apply bg-content-subtle/15 rounded-md animate-pulse; }
 }
 
 @layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+
   .aurora-blob {
     position: absolute;
     border-radius: 50%;
@@ -247,41 +272,12 @@
     pointer-events: none;
   }
 
-  .aurora-blob-1 {
-    width: clamp(240px, 45vw, 720px);
-    height: clamp(240px, 45vw, 720px);
-    animation: aurora-drift-1 28s ease-in-out infinite;
-  }
-
-  .aurora-blob-2 {
-    width: clamp(200px, 38vw, 620px);
-    height: clamp(200px, 38vw, 620px);
-    animation: aurora-drift-2 24s ease-in-out infinite;
-  }
-
-  .aurora-blob-3 {
-    width: clamp(180px, 32vw, 520px);
-    height: clamp(180px, 32vw, 520px);
-    animation: aurora-drift-3 34s ease-in-out infinite;
-  }
-
-  .aurora-blob-4 {
-    width: clamp(160px, 30vw, 480px);
-    height: clamp(160px, 30vw, 480px);
-    animation: aurora-drift-4 26s ease-in-out infinite;
-  }
-
-  .aurora-blob-5 {
-    width: clamp(140px, 25vw, 400px);
-    height: clamp(140px, 25vw, 400px);
-    animation: aurora-drift-5 32s ease-in-out infinite;
-  }
-
-  .aurora-blob-6 {
-    width: clamp(120px, 22vw, 380px);
-    height: clamp(120px, 22vw, 380px);
-    animation: aurora-drift-6 22s ease-in-out infinite;
-  }
+  .aurora-blob-1 { width: clamp(240px, 45vw, 720px); height: clamp(240px, 45vw, 720px); animation: aurora-drift-1 28s ease-in-out infinite; }
+  .aurora-blob-2 { width: clamp(200px, 38vw, 620px); height: clamp(200px, 38vw, 620px); animation: aurora-drift-2 24s ease-in-out infinite; }
+  .aurora-blob-3 { width: clamp(180px, 32vw, 520px); height: clamp(180px, 32vw, 520px); animation: aurora-drift-3 34s ease-in-out infinite; }
+  .aurora-blob-4 { width: clamp(160px, 30vw, 480px); height: clamp(160px, 30vw, 480px); animation: aurora-drift-4 26s ease-in-out infinite; }
+  .aurora-blob-5 { width: clamp(140px, 25vw, 400px); height: clamp(140px, 25vw, 400px); animation: aurora-drift-5 32s ease-in-out infinite; }
+  .aurora-blob-6 { width: clamp(120px, 22vw, 380px); height: clamp(120px, 22vw, 380px); animation: aurora-drift-6 22s ease-in-out infinite; }
 
   @keyframes aurora-drift-1 {
     0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.7; }
@@ -290,7 +286,6 @@
     60% { transform: translate(70px, 40px) rotate(5deg) scale(1.06); opacity: 0.85; }
     80% { transform: translate(-30px, -50px) rotate(-2deg) scale(1.08); opacity: 0.75; }
   }
-
   @keyframes aurora-drift-2 {
     0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.7; }
     20% { transform: translate(-80px, 60px) rotate(-4deg) scale(1.18); opacity: 1; }
@@ -298,7 +293,6 @@
     60% { transform: translate(-40px, 80px) rotate(-5deg) scale(1.12); opacity: 0.9; }
     80% { transform: translate(50px, -30px) rotate(3deg) scale(0.95); opacity: 0.65; }
   }
-
   @keyframes aurora-drift-3 {
     0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.6; }
     20% { transform: translate(50px, 80px) rotate(5deg) scale(0.88); opacity: 0.9; }
@@ -306,20 +300,17 @@
     60% { transform: translate(-60px, 50px) rotate(3deg) scale(1.02); opacity: 1; }
     80% { transform: translate(70px, -40px) rotate(-2deg) scale(0.92); opacity: 0.7; }
   }
-
   @keyframes aurora-drift-4 {
     0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.5; }
     25% { transform: translate(100px, -40px) rotate(-6deg) scale(1.3); opacity: 0.9; }
     50% { transform: translate(-60px, 80px) rotate(4deg) scale(0.82); opacity: 0.35; }
     75% { transform: translate(40px, -60px) rotate(-3deg) scale(1.15); opacity: 0.7; }
   }
-
   @keyframes aurora-drift-5 {
     0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.45; }
     33% { transform: translate(-60px, -50px) rotate(-3deg) scale(1.2); opacity: 0.85; }
     66% { transform: translate(70px, 40px) rotate(4deg) scale(0.9); opacity: 0.4; }
   }
-
   @keyframes aurora-drift-6 {
     0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.4; }
     25% { transform: translate(50px, 70px) rotate(5deg) scale(0.85); opacity: 0.75; }

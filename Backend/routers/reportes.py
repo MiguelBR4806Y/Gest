@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from Backend.db.database import get_db
 from Backend.db.models import Usuario, ChatMensaje
 from Backend.ai.ia_service import analizar_ventas, responder_pregunta
 from Backend.routers.auth import verificar_token
+from Backend.security import limitar
 from datetime import date, datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -12,9 +13,14 @@ router = APIRouter(prefix="/reportes", tags=["Reportes"])
 
 DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
+# Tope de filas que se mandan al modelo: acota coste y tamaño del prompt.
+MAX_VENTAS_EN_CONTEXTO = 300
+MAX_MOVIMIENTOS_EN_CONTEXTO = 100
+MAX_HISTORIAL = 200
+
 
 class PreguntaChat(BaseModel):
-    pregunta: str
+    pregunta: str = Field(min_length=1, max_length=1000)
 
 
 @router.get("/dashboard")
@@ -188,7 +194,7 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
         }
 
 
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(limitar(20, 300, "chat-ia"))])
 async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
@@ -223,8 +229,9 @@ async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)
                 WHERE v.usuario_id = :uid
                 GROUP BY v.id, c.nombre
                 ORDER BY v.fecha_hora DESC
+                LIMIT :limite
             """),
-            {"uid": usuario_id}
+            {"uid": usuario_id, "limite": MAX_VENTAS_EN_CONTEXTO}
         ).mappings().fetchall()
 
         movimientos = session.execute(
@@ -235,9 +242,9 @@ async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)
                 JOIN productos p ON m.producto_id = p.id
                 WHERE p.usuario_id = :uid
                 ORDER BY m.fecha_hora DESC
-                LIMIT 100
+                LIMIT :limite
             """),
-            {"uid": usuario_id}
+            {"uid": usuario_id, "limite": MAX_MOVIMIENTOS_EN_CONTEXTO}
         ).mappings().fetchall()
 
         tasa_cambio = u.tasa_cambio if u else 36.0
@@ -260,7 +267,10 @@ async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)
 
 
 @router.get("/chat/historial")
-def historial_chat(usuario_id: int = Depends(verificar_token), limite: int = Query(default=50)):
+def historial_chat(
+    usuario_id: int = Depends(verificar_token),
+    limite: int = Query(default=50, ge=1, le=MAX_HISTORIAL),
+):
     with get_db() as session:
         mensajes = session.query(ChatMensaje).filter(
             ChatMensaje.usuario_id == usuario_id

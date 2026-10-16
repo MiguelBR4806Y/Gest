@@ -26,6 +26,9 @@ class Usuario(Base):
     zona_horaria = Column(String, default="America/Managua")
     email_verified = Column(Boolean, default=False)
     verificacion_token = Column(String, nullable=True)
+    verificacion_expira = Column(DateTime(timezone=True), nullable=True)
+    verificacion_intentos = Column(Integer, default=0)
+    password_cambiada_en = Column(DateTime(timezone=True), nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
     productos = relationship("Producto", back_populates="usuario")

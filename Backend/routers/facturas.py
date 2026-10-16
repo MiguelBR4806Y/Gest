@@ -8,6 +8,7 @@ from reportlab.lib.units import inch
 from Backend.db.database import get_db
 from Backend.db.models import Usuario
 from Backend.routers.auth import verificar_token
+from Backend.security import escapar_xml, es_color_hex, sanear_texto
 from sqlalchemy import text
 import os
 import re
@@ -76,8 +77,10 @@ def get_config_negocio(session, usuario_id: int) -> dict:
 
 
 def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, color_acento: str = None, logo_path: str = None, tasa_cambio: float = 36.0, zona_horaria: str = "America/Managua") -> str:
-    nombre = nombre_negocio or NOMBRE_NEGOCIO
-    color = color_acento or "#1D9E75"
+    # Estos valores llegan por query string y acaban dentro de un Paragraph de
+    # reportlab, que interpreta marcado tipo <b>. Se sanean antes de usarlos.
+    nombre = sanear_texto(nombre_negocio, 120) or NOMBRE_NEGOCIO
+    color = color_acento if es_color_hex(color_acento or "") else "#1D9E75"
 
     fecha_nica = a_zona(venta["fecha_hora"], zona_horaria)
     carpeta = carpeta_destino(nombre, fecha_nica)
@@ -95,11 +98,12 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
         except Exception:
             pass
 
-    elementos.append(Paragraph(f"<b>{nombre}</b>", styles["Title"]))
+    elementos.append(Paragraph(f"<b>{escapar_xml(nombre)}</b>", styles["Title"]))
     elementos.append(Spacer(1, 0.2 * inch))
     elementos.append(Paragraph(f"<b>Factura #</b>{venta_id}", styles["Normal"]))
     elementos.append(Paragraph(f"<b>Fecha:</b> {formatear_fecha_hora(venta['fecha_hora'], zona_horaria)}", styles["Normal"]))
-    elementos.append(Paragraph(f"<b>Cliente:</b> {venta['cliente_nombre'] or 'Consumidor final'}", styles["Normal"]))
+    cliente = escapar_xml(sanear_texto(venta.get('cliente_nombre'), 120) or 'Consumidor final')
+    elementos.append(Paragraph(f"<b>Cliente:</b> {cliente}", styles["Normal"]))
     elementos.append(Spacer(1, 0.3 * inch))
 
     cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=8)
@@ -115,7 +119,7 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
         subtotal_usd = subtotal / tasa_cambio
         pu_usd = item["precio_unitario"] / tasa_cambio
         data.append([
-            Paragraph(item["nombre"], cell_style),
+            Paragraph(escapar_xml(sanear_texto(item["nombre"], 120)), cell_style),
             Paragraph(str(item["cantidad"]), cell_style),
             Paragraph(f"C$ {fmt(item['precio_unitario'])}<br/>US$ {fmt(pu_usd)}", cell_style),
             Paragraph(f"C$ {fmt(subtotal)}<br/>US$ {fmt(subtotal_usd)}", cell_style),

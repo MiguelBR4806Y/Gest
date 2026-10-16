@@ -1,228 +1,259 @@
-import { useState, useEffect } from "react";
-import { api } from "../lib/api";
-import Modal from "../components/Modal";
-import { Plus, Pencil, Trash2, Tag, Percent, DollarSign, Package } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { DollarSign, Pencil, Percent, Plus, Tag, Trash2 } from "lucide-react";
+
+import Modal, { ConfirmDialog } from "../components/Modal";
+import { Button, IconButton } from "../components/ui/Button";
+import { Card, EmptyState } from "../components/ui/Card";
+import { Checkbox, Field, Input, Select } from "../components/ui/Field";
+import { TableSkeleton } from "../components/ui/Feedback";
 import { useToast } from "../context/ToastContext";
+import { api } from "../lib/api";
 
 const TIPOS = [
-  { value: "porcentaje", label: "Descuento %", icon: Percent },
-  { value: "2x1", label: "2x1", icon: Package },
-  { value: "monto_fijo", label: "Descuento fijo (C$)", icon: DollarSign },
+  { value: "porcentaje", label: "Descuento por porcentaje", icon: Percent },
+  { value: "monto_fijo", label: "Descuento de monto fijo (C$)", icon: DollarSign },
+  { value: "2x1", label: "2x1 (lleva dos, paga uno)", icon: Tag },
 ];
 
-const EMPTY_FORM = { nombre: "", tipo: "porcentaje", valor: 0, activa: true };
+const VACIO = { nombre: "", tipo: "porcentaje", valor: 0, activa: true };
+
+function descripcionValor(p) {
+  if (p.tipo === "porcentaje") return `${p.valor}%`;
+  if (p.tipo === "monto_fijo") return `C$ ${p.valor}`;
+  return "2x1";
+}
 
 export default function PromocionesPage() {
-  const [promos, setPromos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [addOpen, setAddOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [editForm, setEditForm] = useState({ ...EMPTY_FORM, id: null });
-  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => { cargar(); }, []);
+  const [promos, setPromos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [form, setForm] = useState(VACIO);
+  const [editando, setEditando] = useState(null);
+  const [abierta, setAbierta] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [aEliminar, setAEliminar] = useState(null);
 
-  async function cargar() {
-    setLoading(true);
+  const cargar = useCallback(async () => {
+    setCargando(true);
     try {
       const data = await api.get("/promociones/");
-      setPromos(data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }
+      setPromos(Array.isArray(data) ? data : []);
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setCargando(false);
+    }
+  }, [toast]);
 
-  function setF(key, val) { setForm(f => ({ ...f, [key]: val })); }
-  function setEF(key, val) { setEditForm(f => ({ ...f, [key]: val })); }
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
-  async function agregar() {
-    if (!form.nombre.trim()) return;
-    setSaving(true);
-    try {
-      await api.post("/promociones/", {
-        ...form,
-        valor: Number(form.valor),
-      });
-      setAddOpen(false);
-      setForm(EMPTY_FORM);
-      cargar();
-    } catch (e) { toast(e.message, "error"); }
-    finally { setSaving(false); }
+  function abrirNueva() {
+    setEditando(null);
+    setForm(VACIO);
+    setAbierta(true);
   }
 
   function abrirEditar(p) {
-    setEditForm({ id: p.id, nombre: p.nombre, tipo: p.tipo, valor: p.valor, activa: p.activa });
-    setEditOpen(true);
+    setEditando(p.id);
+    setForm({ nombre: p.nombre, tipo: p.tipo, valor: p.valor, activa: p.activa });
+    setAbierta(true);
   }
 
-  async function guardarEdicion() {
-    if (!editForm.nombre.trim()) return;
-    setSaving(true);
+  async function guardar() {
+    if (!form.nombre.trim()) return;
+    setGuardando(true);
     try {
-      await api.put(`/promociones/${editForm.id}`, {
-        nombre: editForm.nombre,
-        tipo: editForm.tipo,
-        valor: Number(editForm.valor),
-        activa: editForm.activa,
-      });
-      setEditOpen(false);
+      const cuerpo = { ...form, nombre: form.nombre.trim(), valor: Number(form.valor) || 0 };
+      if (editando) await api.put(`/promociones/${editando}`, cuerpo);
+      else await api.post("/promociones/", cuerpo);
+      setAbierta(false);
+      toast(editando ? "Promoción actualizada" : "Promoción creada");
       cargar();
-    } catch (e) { toast(e.message, "error"); }
-    finally { setSaving(false); }
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  async function eliminar(id) {
-    if (!confirm("¿Eliminar esta promoción?")) return;
+  async function eliminar() {
+    if (!aEliminar) return;
+    setGuardando(true);
     try {
-      await api.delete(`/promociones/${id}`);
+      await api.delete(`/promociones/${aEliminar.id}`);
+      toast("Promoción eliminada");
+      setAEliminar(null);
       cargar();
-    } catch (e) { toast(e.message, "error"); }
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  function descTipo(tipo) {
-    const t = TIPOS.find(t => t.value === tipo);
-    return t ? t.label : tipo;
-  }
+  const activas = promos.filter((p) => p.activa).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="page-header">
         <div>
           <h1>Promociones</h1>
-          <p>{promos.filter(p => p.activa).length} activas · {promos.length} total</p>
+          <p>
+            {activas} activa{activas === 1 ? "" : "s"} · {promos.length} en total
+          </p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={() => { setForm(EMPTY_FORM); setAddOpen(true); }}>
-          <Plus size={16} /> Nueva promoción
-        </button>
+        <Button icon={Plus} onClick={abrirNueva}>
+          Nueva promoción
+        </Button>
       </div>
 
-      <div className="table-container">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : promos.length === 0 ? (
-          <div className="empty-state">
-            <Tag size={40} />
-            <p>No hay promociones registradas.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className="th">#</th>
-                  <th className="th">Nombre</th>
-                  <th className="th">Tipo</th>
-                  <th className="th text-right">Valor</th>
-                  <th className="th text-center">Estado</th>
-                  <th className="th text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {promos.map((p, i) => (
-                  <tr key={p.id} className="table-row">
-                    <td className="td text-content-subtle">{i + 1}</td>
-                    <td className="td font-medium text-content">{p.nombre}</td>
-                    <td className="td text-content-muted">
-                      <div className="flex items-center gap-1.5">
-                        {(() => {
-                          const Icon = TIPOS.find(t => t.value === p.tipo)?.icon ?? Tag;
-                          return <Icon size={14} />;
-                        })()}
-                        {descTipo(p.tipo)}
-                      </div>
-                    </td>
-                    <td className="td text-right font-medium">
-                      {p.tipo === "porcentaje" && `${p.valor}%`}
-                      {p.tipo === "2x1" && "—"}
-                      {p.tipo === "monto_fijo" && `C$${p.valor}`}
-                    </td>
-                    <td className="td text-center">
-                      <span className={p.activa ? "badge-green" : "badge-red"}>
-                        {p.activa ? "Activa" : "Inactiva"}
-                      </span>
-                    </td>
-                    <td className="td">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => abrirEditar(p)} className="btn-ghost p-1.5" title="Editar">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => eliminar(p.id)} className="btn-ghost p-1.5 text-red-400 hover:text-red-300" title="Eliminar">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+      {cargando ? (
+        <TableSkeleton filas={5} columnas={5} />
+      ) : (
+        <Card className="overflow-hidden">
+          {promos.length === 0 ? (
+            <EmptyState
+              icon={Tag}
+              title="Sin promociones"
+              text="Crea una promoción y asígnala a tus productos desde Inventario."
+              action={
+                <Button size="sm" icon={Plus} onClick={abrirNueva}>
+                  Crear promoción
+                </Button>
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="th">Nombre</th>
+                    <th className="th hidden sm:table-cell">Tipo</th>
+                    <th className="th text-right">Valor</th>
+                    <th className="th text-center">Estado</th>
+                    <th className="th text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody>
+                  {promos.map((p) => (
+                    <tr key={p.id} className="table-row">
+                      <td className="td font-medium max-w-[14rem] truncate">{p.nombre}</td>
+                      <td className="td hidden sm:table-cell text-content-muted">
+                        {TIPOS.find((t) => t.value === p.tipo)?.label ?? p.tipo}
+                      </td>
+                      <td className="td text-right font-medium tabular">
+                        {descripcionValor(p)}
+                      </td>
+                      <td className="td text-center">
+                        <span className={p.activa ? "badge-green" : "badge-neutral"}>
+                          {p.activa ? "Activa" : "Inactiva"}
+                        </span>
+                      </td>
+                      <td className="td">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <IconButton label="Editar" icon={Pencil} onClick={() => abrirEditar(p)} />
+                          <IconButton
+                            label="Eliminar"
+                            icon={Trash2}
+                            onClick={() => setAEliminar(p)}
+                            className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
-      {/* Agregar */}
-      <Modal title="Nueva promoción" open={addOpen} onClose={() => setAddOpen(false)}>
+      <Modal
+        open={abierta}
+        onClose={() => setAbierta(false)}
+        title={editando ? "Editar promoción" : "Nueva promoción"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAbierta(false)} disabled={guardando}>
+              Cancelar
+            </Button>
+            <Button onClick={guardar} loading={guardando} disabled={!form.nombre.trim()}>
+              {editando ? "Guardar cambios" : "Crear promoción"}
+            </Button>
+          </>
+        }
+      >
         <div className="space-y-4">
-          <div>
-            <label className="label">Nombre *</label>
-            <input className="input" placeholder="Ej: Descuento de temporada" value={form.nombre} onChange={e => setF("nombre", e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Tipo</label>
-            <select className="input" value={form.tipo} onChange={e => setF("tipo", e.target.value)}>
-              {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </div>
+          <Field label="Nombre" required>
+            <Input
+              value={form.nombre}
+              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+              placeholder="Ej: Descuento de temporada"
+              maxLength={120}
+            />
+          </Field>
+
+          <Field label="Tipo de promoción">
+            <Select
+              value={form.tipo}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  tipo: e.target.value,
+                  valor: e.target.value === "2x1" ? 0 : f.valor,
+                }))
+              }
+            >
+              {TIPOS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           {form.tipo !== "2x1" && (
-            <div>
-              <label className="label">{form.tipo === "porcentaje" ? "Porcentaje de descuento" : "Monto de descuento (C$)"}</label>
-              <input className="input" type="number" min="0" step="0.01" value={form.valor} onChange={e => setF("valor", e.target.value)} />
-            </div>
+            <Field
+              label={form.tipo === "porcentaje" ? "Porcentaje de descuento" : "Monto a descontar (C$)"}
+              hint={
+                form.tipo === "porcentaje"
+                  ? "Se aplica sobre el subtotal de la venta."
+                  : "No puede superar el total de la venta."
+              }
+            >
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                max={form.tipo === "porcentaje" ? 100 : undefined}
+                value={form.valor}
+                onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))}
+              />
+            </Field>
           )}
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="add-activa" checked={form.activa} onChange={e => setF("activa", e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-surface text-brand-500 focus:ring-brand-500/40" />
-            <label htmlFor="add-activa" className="text-sm text-content">Activa</label>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button className="btn-secondary" onClick={() => setAddOpen(false)}>Cancelar</button>
-            <button className="btn-primary" onClick={agregar} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
-          </div>
+
+          <Checkbox
+            label="Activa"
+            checked={form.activa}
+            onChange={(e) => setForm((f) => ({ ...f, activa: e.target.checked }))}
+          />
         </div>
       </Modal>
 
-      {/* Editar */}
-      <Modal title="Editar promoción" open={editOpen} onClose={() => setEditOpen(false)}>
-        <div className="space-y-4">
-          <div>
-            <label className="label">Nombre *</label>
-            <input className="input" value={editForm.nombre} onChange={e => setEF("nombre", e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Tipo</label>
-            <select className="input" value={editForm.tipo} onChange={e => setEF("tipo", e.target.value)}>
-              {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </div>
-          {editForm.tipo !== "2x1" && (
-            <div>
-              <label className="label">{editForm.tipo === "porcentaje" ? "Porcentaje de descuento" : "Monto de descuento (C$)"}</label>
-              <input className="input" type="number" min="0" step="0.01" value={editForm.valor} onChange={e => setEF("valor", e.target.value)} />
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="edit-activa" checked={editForm.activa} onChange={e => setEF("activa", e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-surface text-brand-500 focus:ring-brand-500/40" />
-            <label htmlFor="edit-activa" className="text-sm text-content">Activa</label>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button className="btn-secondary" onClick={() => setEditOpen(false)}>Cancelar</button>
-            <button className="btn-primary" onClick={guardarEdicion} disabled={saving}>{saving ? "Guardando..." : "Guardar cambios"}</button>
-          </div>
-        </div>
-      </Modal>
+      <ConfirmDialog
+        open={Boolean(aEliminar)}
+        onClose={() => setAEliminar(null)}
+        onConfirm={eliminar}
+        loading={guardando}
+        title="Eliminar promoción"
+        confirmLabel="Eliminar"
+        mensaje={`Se eliminará "${aEliminar?.nombre ?? ""}". Los productos que la tengan asignada quedarán sin promoción.`}
+      />
     </div>
   );
 }
