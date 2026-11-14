@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ArrowLeft, ChevronRight, Download, Eye, FileText, FolderOpen,
+  ArrowLeft, ChevronRight, Download, Eye, FileText, FolderOpen, Send,
 } from "lucide-react";
 
+import EnviarFacturaModal from "../components/EnviarFacturaModal";
 import { Button, IconButton } from "../components/ui/Button";
 import { Card, EmptyState } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Feedback";
@@ -44,6 +45,7 @@ export default function OrganizacionPage() {
   const [verFacturas, setVerFacturas] = useState(false);
   const [tituloFacturas, setTituloFacturas] = useState("");
   const [descargando, setDescargando] = useState(false);
+  const [aEnviar, setAEnviar] = useState(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -336,6 +338,11 @@ export default function OrganizacionPage() {
                                 )
                               }
                             />
+                            <IconButton
+                              label="Enviar factura"
+                              icon={Send}
+                              onClick={() => setAEnviar({ id: f.id })}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -390,6 +397,12 @@ export default function OrganizacionPage() {
           })}
         </ul>
       )}
+
+      <EnviarFacturaModal
+        venta={aEnviar}
+        open={Boolean(aEnviar)}
+        onClose={() => setAEnviar(null)}
+      />
     </div>
   );
 }

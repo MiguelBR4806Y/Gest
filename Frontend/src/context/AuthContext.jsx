@@ -8,6 +8,10 @@ const AuthContext = createContext(null);
 const CLAVES = {
   token: "token",
   usuario: "usuario",
+  nombre: "nombre_usuario",
+  rol: "rol",
+  modulos: "modulos",
+  negocio_id: "negocio_id",
   email: "user_email",
   email_verified: "email_verified",
   provider: "provider",
@@ -34,12 +38,30 @@ const escribir = (clave, valor) => {
   }
 };
 
+/** Lee la lista de módulos guardada, con la misma tolerancia al fallo. */
+function leerModulos() {
+  try {
+    const guardado = JSON.parse(leer(CLAVES.modulos) || "[]");
+    return Array.isArray(guardado) ? guardado : [];
+  } catch {
+    return [];
+  }
+}
+
 function usuarioDesdeStorage() {
   const token = leer(CLAVES.token);
   if (!token) return null;
+  const rol = leer(CLAVES.rol) || "admin";
   return {
     token,
     usuario: leer(CLAVES.usuario),
+    nombre: leer(CLAVES.nombre) || leer(CLAVES.usuario),
+    rol,
+    // El admin no necesita lista: sus módulos se derivan del rol.
+    modulos: rol === "admin"
+      ? ["ventas", "rrhh", "contabilidad"]
+      : leerModulos(),
+    negocio_id: Number(leer(CLAVES.negocio_id) || 0),
     email: leer(CLAVES.email) ?? "",
     email_verified: leer(CLAVES.email_verified) === "true",
     provider: leer(CLAVES.provider) ?? "",
@@ -58,6 +80,10 @@ export function AuthProvider({ children }) {
   const guardarSesion = useCallback((data) => {
     escribir(CLAVES.token, data.token);
     escribir(CLAVES.usuario, data.usuario);
+    escribir(CLAVES.nombre, data.nombre || data.usuario);
+    escribir(CLAVES.rol, data.rol || "admin");
+    escribir(CLAVES.modulos, JSON.stringify(data.modulos ?? []));
+    escribir(CLAVES.negocio_id, data.negocio_id ?? "");
     escribir(CLAVES.email, data.email ?? "");
     escribir(CLAVES.email_verified, data.email_verified ?? false);
     escribir(CLAVES.provider, data.provider ?? "");
@@ -73,6 +99,13 @@ export function AuthProvider({ children }) {
     setUser({
       token: data.token,
       usuario: data.usuario,
+      nombre: data.nombre || data.usuario,
+      rol: data.rol || "admin",
+      modulos: data.modulos
+        ?? ((data.rol || "admin") === "admin"
+          ? ["ventas", "rrhh", "contabilidad"]
+          : []),
+      negocio_id: data.negocio_id ?? 0,
       email: data.email ?? "",
       email_verified: data.email_verified ?? false,
       provider: data.provider ?? "",
@@ -113,6 +146,10 @@ export function AuthProvider({ children }) {
         if (cancelado) return;
         const actualizado = {
           ...enStorage,
+          nombre: d.nombre || enStorage.nombre,
+          rol: d.rol || enStorage.rol,
+          modulos: Array.isArray(d.modulos) ? d.modulos : enStorage.modulos,
+          negocio_id: d.negocio_id ?? enStorage.negocio_id,
           nombre_negocio: d.nombre_negocio ?? enStorage.nombre_negocio,
           email: d.email ?? "",
           email_verified: d.email_verified ?? false,
@@ -123,6 +160,10 @@ export function AuthProvider({ children }) {
           color_acento: d.color_acento ?? "",
         };
         escribir(CLAVES.nombre_negocio, actualizado.nombre_negocio);
+        escribir(CLAVES.nombre, actualizado.nombre);
+        escribir(CLAVES.rol, actualizado.rol);
+        escribir(CLAVES.modulos, JSON.stringify(actualizado.modulos ?? []));
+        escribir(CLAVES.negocio_id, actualizado.negocio_id);
         escribir(CLAVES.email, actualizado.email);
         escribir(CLAVES.email_verified, actualizado.email_verified);
         escribir(CLAVES.tasa_cambio, actualizado.tasa_cambio);
@@ -205,6 +246,11 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       loading,
+      esAdmin: (user?.rol ?? "admin") === "admin",
+      modulos: user?.modulos ?? [],
+      /** El admin puede todo; una cuenta hija solo sus módulos. */
+      puede: (modulo) =>
+        (user?.rol ?? "admin") === "admin" || (user?.modulos ?? []).includes(modulo),
       login,
       googleLogin,
       logout: cerrarSesionLocal,

@@ -21,8 +21,9 @@ from Backend.routers.auth import crear_token, hash_password  # noqa: E402
 from Backend.security import rate_limiter  # noqa: E402
 
 TABLAS = (
-    "eventos", "chat_mensajes", "movimientos", "venta_items", "ventas",
-    "productos", "promociones", "clientes", "usuarios",
+    "enlaces_factura", "gastos", "compra_items", "compras", "proveedores",
+    "empleados", "eventos", "chat_mensajes", "movimientos", "venta_items",
+    "ventas", "productos", "promociones", "clientes", "usuarios",
 )
 
 
@@ -53,13 +54,18 @@ def cliente_api():
 @pytest.fixture
 def crear_usuario():
     def _crear(usuario="ana", password="Segura123", zona="America/Managua",
-               tasa="36.0000", email=None):
+               tasa="36.0000", email=None, rol="admin", dueno_id=None,
+               activo=True, nombre=None):
         with SessionLocal() as session:
             u = Usuario(
                 usuario=usuario,
                 password=hash_password(password),
                 email=email,
                 email_verified=bool(email),
+                nombre=nombre,
+                rol=rol,
+                dueno_id=dueno_id,
+                activo=activo,
                 nombre_negocio=f"Negocio {usuario}",
                 zona_horaria=zona,
                 tasa_cambio=tasa,
@@ -91,3 +97,28 @@ def auth(crear_usuario):
         headers={"Authorization": f"Bearer {datos['token']}"},
         otro=lambda nombre="beto": crear_usuario(nombre),
     )
+
+
+@pytest.fixture
+def auth_admin(crear_usuario):
+    """Admin con sesión y cabeceras listas (rol explícito)."""
+    from types import SimpleNamespace
+
+    datos = crear_usuario(usuario="jefe", rol="admin")
+    return SimpleNamespace(
+        token=datos["token"],
+        usuario_id=datos["id"],
+        headers={"Authorization": f"Bearer {datos['token']}"},
+    )
+
+
+@pytest.fixture
+def crear_vendedor(crear_usuario):
+    """Crea un vendedor hijo de un admin y devuelve credenciales de ambos."""
+
+    def _crear(admin_usuario="jefe", vendedor="vendedor1"):
+        admin = crear_usuario(usuario=admin_usuario, rol="admin")
+        hijo = crear_usuario(usuario=vendedor, rol="vendedor", dueno_id=admin["id"])
+        return admin, hijo
+
+    return _crear

@@ -4,7 +4,7 @@ import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import bcrypt
 import httpx
@@ -19,10 +19,16 @@ from Backend.db.database import get_db
 from Backend.db.models import (
     ChatMensaje,
     Cliente,
+    Compra,
+    CompraItem,
+    Empleado,
+    EnlaceFactura,
     Evento,
+    Gasto,
     Movimiento,
     Producto,
     Promocion,
+    Proveedor,
     Usuario,
     Venta,
     VentaItem,
@@ -72,6 +78,10 @@ if len(SECRET_KEY) < 32:
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
+
+# Módulos que el admin puede conceder a una cuenta hija. El admin los tiene
+# todos implícitamente; una cuenta hija solo los asignados.
+MODULOS = ("ventas", "rrhh", "contabilidad")
 
 # Intentos de verificación de código antes de invalidarlo.
 MAX_INTENTOS_CODIGO = 5
@@ -247,7 +257,41 @@ def crear_token(usuario_id: int, usuario: str, version: int = 0) -> str:
     )
 
 
-def verificar_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> int:
+class SesionActual(NamedTuple):
+    """Identidad de la petición separada en cuenta y negocio.
+
+    `usuario_id` es la cuenta que inició sesión (admin o subordinado);
+    `negocio_id` es el dueño de los datos sobre los que se opera. Para el admin
+    ambos coinciden; para una cuenta hija, `negocio_id` es el id de su dueño.
+
+    `modulos` define qué puede hacer: el admin los tiene todos, y una cuenta
+    hija solo los que el admin le asignó. `rol` se conserva como jerarquía
+    (dueño vs. subordinado) porque ya está en la base y en los JWT existentes.
+    """
+
+    usuario_id: int
+    negocio_id: int
+    rol: str
+    nombre: str
+    modulos: frozenset[str]
+    es_admin: bool
+
+
+def modulos_de(u: Usuario) -> frozenset[str]:
+    """Módulos efectivos de una cuenta. El admin siempre tiene los tres."""
+    if (u.rol or "admin") == "admin":
+        return frozenset(MODULOS)
+    # Cuentas anteriores a los módulos: se les deja el acceso de ventas que
+    # tenían, en vez de dejarlas sin nada.
+    crudos = (u.modulos or "").split(",")
+    return frozenset(m.strip() for m in crudos if m.strip() in MODULOS) or frozenset(
+        {"ventas"}
+    )
+
+
+def sesion_actual(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> SesionActual:
     """Valida el JWT y comprueba en BD que la cuenta siga activa y no revocada."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=401, detail="No autenticado")
@@ -266,20 +310,80 @@ def verificar_token(credentials: Optional[HTTPAuthorizationCredentials] = Depend
         # todos los tokens emitidos con la versión anterior dejan de valer.
         if version != (u.token_version or 0):
             raise HTTPException(status_code=401, detail="Sesión expirada, inicia sesión de nuevo")
-    return usuario_id
+        if u.activo is False:
+            raise HTTPException(status_code=401, detail="Cuenta desactivada")
+
+        rol = u.rol or "admin"
+        es_admin = rol == "admin"
+        if es_admin:
+            negocio_id = u.id
+        else:
+            negocio_id = u.dueno_id
+            if not negocio_id:
+                raise HTTPException(status_code=401, detail="Token inválido")
+
+        return SesionActual(
+            usuario_id=u.id,
+            negocio_id=negocio_id,
+            rol=rol,
+            nombre=u.nombre or u.usuario,
+            modulos=modulos_de(u),
+            es_admin=es_admin,
+        )
 
 
-def usuario_a_respuesta(u: Usuario) -> dict:
+def verificar_token(sesion: SesionActual = Depends(sesion_actual)) -> int:
+    """Id del negocio dueño de los datos.
+
+    Se mantiene el nombre para que los routers existentes no cambien: cada
+    consulta sigue filtrando por `usuario_id`, pero ahora un vendedor opera
+    sobre los datos de su admin.
+    """
+    return sesion.negocio_id
+
+
+def requiere_admin(sesion: SesionActual = Depends(sesion_actual)) -> SesionActual:
+    if not sesion.es_admin:
+        raise HTTPException(status_code=403, detail="Solo el administrador puede hacer esto")
+    return sesion
+
+
+def requiere_modulo(*modulos: str):
+    """Dependencia que exige al menos uno de los módulos indicados.
+
+    Devuelve una función para poder usarse como `Depends(requiere_modulo("rrhh"))`.
+    El admin pasa siempre, sin importar la lista.
+    """
+    exigidos = set(modulos)
+
+    def _dependencia(sesion: SesionActual = Depends(sesion_actual)) -> SesionActual:
+        if sesion.es_admin or exigidos & sesion.modulos:
+            return sesion
+        raise HTTPException(status_code=403, detail="No tienes acceso a este módulo")
+
+    return _dependencia
+
+
+def usuario_a_respuesta(u: Usuario, session) -> dict:
+    negocio = u
+    if u.rol == "vendedor" and u.dueno_id:
+        # El vendedor hereda la configuración visual y operativa del negocio.
+        negocio = session.query(Usuario).filter(Usuario.id == u.dueno_id).first() or u
     return {
         "token": crear_token(u.id, u.usuario, u.token_version or 0),
         "usuario": u.usuario,
+        "nombre": u.nombre or u.usuario,
+        "rol": u.rol or "admin",
+        "modulos": sorted(modulos_de(u)),
+        "negocio_id": negocio.id,
         "email": u.email,
         "email_verified": u.email_verified,
         "provider": u.provider,
-        "nombre_negocio": u.nombre_negocio,
-        "tasa_cambio": a_float(u.tasa_cambio),
-        "tasa_cambio_configurada": u.tasa_cambio_configurada,
-        "zona_horaria": u.zona_horaria,
+        "nombre_negocio": negocio.nombre_negocio,
+        "color_acento": negocio.color_acento,
+        "tasa_cambio": a_float(negocio.tasa_cambio),
+        "tasa_cambio_configurada": negocio.tasa_cambio_configurada,
+        "zona_horaria": negocio.zona_horaria,
     }
 
 
@@ -374,7 +478,7 @@ def login(datos: LoginData, request: Request):
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
         rate_limiter.limpiar("login", ip_cliente(request))
-        return usuario_a_respuesta(usuario)
+        return usuario_a_respuesta(usuario, session)
 
 
 @router.post("/oauth/google", dependencies=[Depends(limitar(10, 60, "oauth"))])
@@ -413,7 +517,7 @@ def login_google(datos: GoogleOAuthData):
     with get_db() as session:
         usuario = session.query(Usuario).filter(Usuario.email == email).first()
         if usuario:
-            return usuario_a_respuesta(usuario)
+            return usuario_a_respuesta(usuario, session)
 
         base = sanear_texto(email.split("@")[0], 60) or "usuario"
         username = base
@@ -436,7 +540,7 @@ def login_google(datos: GoogleOAuthData):
         )
         session.add(usuario)
         session.flush()
-        return usuario_a_respuesta(usuario)
+        return usuario_a_respuesta(usuario, session)
 
 
 @router.post("/recuperar", dependencies=[Depends(limitar(5, 900, "recuperar"))])
@@ -531,28 +635,38 @@ def reset_password(datos: ResetPassword):
 
 
 @router.get("/perfil")
-def obtener_perfil(usuario_id: int = Depends(verificar_token)):
+def obtener_perfil(sesion: SesionActual = Depends(sesion_actual)):
     with get_db() as session:
-        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        u = session.query(Usuario).filter(Usuario.id == sesion.usuario_id).first()
         if not u:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        negocio = session.query(Usuario).filter(Usuario.id == sesion.negocio_id).first() or u
         return {
-            "nombre_negocio": u.nombre_negocio,
+            "usuario": u.usuario,
+            "nombre": u.nombre or u.usuario,
+            "rol": u.rol or "admin",
+            "modulos": sorted(modulos_de(u)),
+            "negocio_id": sesion.negocio_id,
+            "nombre_negocio": negocio.nombre_negocio,
             "email": u.email,
             "email_verified": u.email_verified,
             "provider": u.provider,
-            "logo_path": u.logo_path,
-            "color_acento": u.color_acento,
-            "modo_factura": u.modo_factura,
-            "tasa_cambio": u.tasa_cambio,
-            "tasa_cambio_configurada": u.tasa_cambio_configurada,
-            "zona_horaria": u.zona_horaria,
+            "logo_path": negocio.logo_path,
+            "color_acento": negocio.color_acento,
+            "modo_factura": negocio.modo_factura,
+            "tasa_cambio": negocio.tasa_cambio,
+            "tasa_cambio_configurada": negocio.tasa_cambio_configurada,
+            "zona_horaria": negocio.zona_horaria,
         }
 
 
-@router.put("/perfil", dependencies=[Depends(limitar(30, 60, "perfil"))])
-def actualizar_perfil(datos: PerfilData, usuario_id: int = Depends(verificar_token)):
+@router.put(
+    "/perfil",
+    dependencies=[Depends(limitar(30, 60, "perfil")), Depends(requiere_admin)],
+)
+def actualizar_perfil(datos: PerfilData, sesion: SesionActual = Depends(sesion_actual)):
     email_nuevo = datos.email or None
+    usuario_id = sesion.usuario_id
 
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
@@ -596,7 +710,8 @@ def actualizar_perfil(datos: PerfilData, usuario_id: int = Depends(verificar_tok
 
 
 @router.put("/password", dependencies=[Depends(limitar(5, 900, "password"))])
-def cambiar_password(datos: CambioPasswordData, usuario_id: int = Depends(verificar_token)):
+def cambiar_password(datos: CambioPasswordData, sesion: SesionActual = Depends(sesion_actual)):
+    usuario_id = sesion.usuario_id
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
@@ -616,7 +731,8 @@ def cambiar_password(datos: CambioPasswordData, usuario_id: int = Depends(verifi
 
 
 @router.post("/enviar-verificacion", dependencies=[Depends(limitar(5, 900, "verificacion-envio"))])
-def enviar_verificacion_endpoint(usuario_id: int = Depends(verificar_token)):
+def enviar_verificacion_endpoint(sesion: SesionActual = Depends(sesion_actual)):
+    usuario_id = sesion.usuario_id
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
@@ -635,7 +751,8 @@ def enviar_verificacion_endpoint(usuario_id: int = Depends(verificar_token)):
 
 
 @router.post("/verificar-codigo", dependencies=[Depends(limitar(10, 900, "verificacion-codigo"))])
-def verificar_codigo(datos: VerificarCodigoData, usuario_id: int = Depends(verificar_token)):
+def verificar_codigo(datos: VerificarCodigoData, sesion: SesionActual = Depends(sesion_actual)):
+    usuario_id = sesion.usuario_id
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
@@ -676,8 +793,12 @@ def verificar_codigo(datos: VerificarCodigoData, usuario_id: int = Depends(verif
         return {"mensaje": "Correo verificado exitosamente"}
 
 
-@router.delete("/cuenta", dependencies=[Depends(limitar(3, 3600, "eliminar-cuenta"))])
-def eliminar_cuenta(datos: EliminarCuentaData, usuario_id: int = Depends(verificar_token)):
+@router.delete(
+    "/cuenta",
+    dependencies=[Depends(limitar(3, 3600, "eliminar-cuenta")), Depends(requiere_admin)],
+)
+def eliminar_cuenta(datos: EliminarCuentaData, sesion: SesionActual = Depends(sesion_actual)):
+    usuario_id = sesion.negocio_id
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
@@ -687,8 +808,37 @@ def eliminar_cuenta(datos: EliminarCuentaData, usuario_id: int = Depends(verific
 
         archivos = [ruta for ruta in (u.logo_path, u.plantilla_pdf_path) if ruta]
 
+        # Las cuentas de vendedores no tienen datos propios: se borran con el
+        # negocio, o la cuenta del admin quedaría sin forma de eliminarse.
+        hijos = [
+            fila.id
+            for fila in session.query(Usuario.id).filter(
+                Usuario.dueno_id == usuario_id
+            ).all()
+        ]
+        if hijos:
+            session.query(ChatMensaje).filter(
+                ChatMensaje.usuario_id.in_(hijos)
+            ).delete(synchronize_session=False)
+            session.query(Evento).filter(
+                Evento.usuario_id.in_(hijos)
+            ).delete(synchronize_session=False)
+            session.query(Usuario).filter(Usuario.id.in_(hijos)).delete(
+                synchronize_session=False
+            )
+
         session.query(ChatMensaje).filter(ChatMensaje.usuario_id == usuario_id).delete()
         session.query(Evento).filter(Evento.usuario_id == usuario_id).delete()
+        session.query(Gasto).filter(Gasto.usuario_id == usuario_id).delete()
+        session.query(EnlaceFactura).filter(EnlaceFactura.usuario_id == usuario_id).delete()
+        session.query(CompraItem).filter(
+            CompraItem.compra_id.in_(
+                session.query(Compra.id).filter(Compra.usuario_id == usuario_id)
+            )
+        ).delete(synchronize_session=False)
+        session.query(Compra).filter(Compra.usuario_id == usuario_id).delete()
+        session.query(Proveedor).filter(Proveedor.usuario_id == usuario_id).delete()
+        session.query(Empleado).filter(Empleado.usuario_id == usuario_id).delete()
         session.query(VentaItem).filter(
             VentaItem.venta_id.in_(
                 session.query(Venta.id).filter(Venta.usuario_id == usuario_id)
@@ -715,11 +865,15 @@ def eliminar_cuenta(datos: EliminarCuentaData, usuario_id: int = Depends(verific
     return {"mensaje": "Cuenta y todos sus datos eliminados correctamente"}
 
 
-@router.post("/perfil/logo", dependencies=[Depends(limitar(10, 300, "subida-logo"))])
+@router.post(
+    "/perfil/logo",
+    dependencies=[Depends(limitar(10, 300, "subida-logo")), Depends(requiere_admin)],
+)
 async def subir_logo(
     archivo: UploadFile = File(...),
-    usuario_id: int = Depends(verificar_token),
+    sesion: SesionActual = Depends(sesion_actual),
 ):
+    usuario_id = sesion.negocio_id
     contenido = await leer_subida_segura(archivo, {"png", "jpg"}, MAX_LOGO_BYTES, "logo")
     extension = "png" if contenido.startswith(b"\x89PNG") else "jpg"
 
@@ -734,11 +888,15 @@ async def subir_logo(
     return {"mensaje": "Logo subido con éxito", "logo_path": path}
 
 
-@router.post("/perfil/plantilla", dependencies=[Depends(limitar(10, 300, "subida-plantilla"))])
+@router.post(
+    "/perfil/plantilla",
+    dependencies=[Depends(limitar(10, 300, "subida-plantilla")), Depends(requiere_admin)],
+)
 async def subir_plantilla(
     archivo: UploadFile = File(...),
-    usuario_id: int = Depends(verificar_token),
+    sesion: SesionActual = Depends(sesion_actual),
 ):
+    usuario_id = sesion.negocio_id
     contenido = await leer_subida_segura(archivo, {"pdf"}, MAX_PLANTILLA_BYTES, "archivo")
 
     os.makedirs(PLANTILLAS_DIR, exist_ok=True)
@@ -756,20 +914,23 @@ async def subir_plantilla(
 
 
 @router.get("/tasa-cambio")
-def obtener_tasa_cambio(usuario_id: int = Depends(verificar_token)):
+def obtener_tasa_cambio(sesion: SesionActual = Depends(sesion_actual)):
     with get_db() as session:
-        u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
+        u = session.query(Usuario).filter(Usuario.id == sesion.negocio_id).first()
         if not u:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         return {"tasa_cambio": u.tasa_cambio}
 
 
-@router.put("/tasa-cambio", dependencies=[Depends(limitar(30, 60, "tasa-cambio"))])
-def actualizar_tasa_cambio(data: TasaCambioData, usuario_id: int = Depends(verificar_token)):
+@router.put(
+    "/tasa-cambio",
+    dependencies=[Depends(limitar(30, 60, "tasa-cambio")), Depends(requiere_admin)],
+)
+def actualizar_tasa_cambio(data: TasaCambioData, sesion: SesionActual = Depends(sesion_actual)):
     if data.tasa_cambio <= 0:
         raise HTTPException(status_code=400, detail="La tasa debe ser mayor a cero")
     with get_db() as session:
-        session.query(Usuario).filter(Usuario.id == usuario_id).update({
+        session.query(Usuario).filter(Usuario.id == sesion.negocio_id).update({
             Usuario.tasa_cambio: tasa_decimal(data.tasa_cambio)
         })
         return {

@@ -3,9 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from Backend.db.database import get_db
 from Backend.db.models import Promocion
 from Backend.models.schema import PromocionCrear
-from Backend.routers.auth import verificar_token
+from Backend.routers.auth import requiere_admin, verificar_token
 
-router = APIRouter(prefix="/promociones", tags=["Promociones"])
+router = APIRouter(
+    prefix="/promociones",
+    tags=["Promociones"],
+    dependencies=[Depends(requiere_admin)],
+)
 
 
 @router.get("/")

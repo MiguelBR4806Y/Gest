@@ -9,3 +9,4 @@ pypdf==6.13.2
 sqlalchemy==2.0.51
 psycopg2-binary==2.9.12
 bcrypt==5.0.0
+cryptography==50.0.0

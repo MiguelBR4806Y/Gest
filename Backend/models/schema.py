@@ -1,8 +1,9 @@
+import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from Backend.security import sanear_texto, validar_password
 
@@ -99,6 +100,7 @@ class Promocion(PromocionCrear):
 class ClienteCrear(BaseModel):
     nombre: str = Field(min_length=1, max_length=MAX_TEXTO)
     telefono: Optional[str] = Field(default=None, max_length=32)
+    email: Optional[str] = Field(default=None, max_length=254)
     credito_limite: Importe = Decimal("0.00")
     # Solo un administrador debería poder fijar el crédito usado; se mantiene
     # por compatibilidad con el formulario actual.
@@ -118,6 +120,17 @@ class ClienteCrear(BaseModel):
         if not all(c.isdigit() or c in "+()- ./" for c in limpio):
             raise ValueError("El teléfono contiene caracteres no válidos")
         return limpio
+
+    @field_validator("email")
+    @classmethod
+    def _sanear_email(cls, v: Optional[str]) -> Optional[str]:
+        limpio = sanear_texto(v, 254)
+        if not limpio:
+            return None
+        # Mismo criterio que en el registro de cuentas.
+        if not re.fullmatch(r"[^@\s]{1,64}@[^@\s.]+(\.[^@\s.]+)+", limpio):
+            raise ValueError("El correo electrónico no es válido")
+        return limpio.lower()
 
 
 class Cliente(ClienteCrear):
@@ -156,6 +169,15 @@ class VentaCrear(BaseModel):
     cliente_id: Optional[int] = Field(default=None, gt=0)
     metodo_pago: MetodoPago = "efectivo"
     items: list[VentaItem] = Field(min_length=1, max_length=200)
+    # Solo para efectivo: lo que entregó el cliente. El vuelto lo calcula el
+    # servidor a partir del total real de la venta.
+    efectivo_recibido: Optional[Importe] = None
+
+    @model_validator(mode="after")
+    def _validar_efectivo(self):
+        if self.metodo_pago != "efectivo" and self.efectivo_recibido is not None:
+            raise ValueError("El efectivo recibido solo aplica al pago en efectivo")
+        return self
 
 
 class AnularVenta(BaseModel):
@@ -173,9 +195,92 @@ class Venta(BaseModel):
     total: Decimal
     metodo_pago: str
     estado: str
+    efectivo_recibido: Optional[Decimal] = None
+    vuelto: Optional[Decimal] = None
     fecha_hora: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ── Proveedores ──
+class ProveedorCrear(BaseModel):
+    nombre: str = Field(min_length=1, max_length=MAX_TEXTO)
+    contacto: Optional[str] = Field(default=None, max_length=120)
+    email: Optional[str] = Field(default=None, max_length=254)
+    telefono: Optional[str] = Field(default=None, max_length=32)
+    notas: Optional[str] = Field(default=None, max_length=300)
+    activo: bool = True
+
+    @field_validator("nombre")
+    @classmethod
+    def _sanear_nombre(cls, v: str) -> str:
+        return _texto_obligatorio(v)
+
+    @field_validator("email")
+    @classmethod
+    def _sanear_email(cls, v: Optional[str]) -> Optional[str]:
+        limpio = sanear_texto(v, 254)
+        if not limpio:
+            return None
+        if not re.fullmatch(r"[^@\s]{1,64}@[^@\s.]+(\.[^@\s.]+)+", limpio):
+            raise ValueError("El correo electrónico no es válido")
+        return limpio.lower()
+
+    @field_validator("telefono")
+    @classmethod
+    def _sanear_telefono(cls, v: Optional[str]) -> Optional[str]:
+        limpio = sanear_texto(v, 32)
+        if not limpio:
+            return None
+        if not all(c.isdigit() or c in "+()- ./" for c in limpio):
+            raise ValueError("El teléfono contiene caracteres no válidos")
+        return limpio
+
+    @field_validator("contacto", "notas")
+    @classmethod
+    def _sanear_opcional(cls, v: Optional[str]) -> Optional[str]:
+        return sanear_texto(v, 300) or None
+
+
+# ── Compras ──
+class CompraItemCrear(BaseModel):
+    producto_id: int = Field(gt=0)
+    cantidad: int = Field(ge=1, le=MAX_CANTIDAD)
+    # El costo unitario lo escribe el admin: es el dato del proveedor.
+    costo_unitario: Importe
+
+
+class CompraCrear(BaseModel):
+    proveedor_id: Optional[int] = Field(default=None, gt=0)
+    items: list[CompraItemCrear] = Field(min_length=1, max_length=200)
+    nota: Optional[str] = Field(default=None, max_length=300)
+
+    @field_validator("nota")
+    @classmethod
+    def _sanear_nota(cls, v: Optional[str]) -> Optional[str]:
+        return sanear_texto(v, 300) or None
+
+
+# ── Gastos ──
+class GastoCrear(BaseModel):
+    concepto: str = Field(min_length=1, max_length=MAX_TEXTO)
+    categoria: str = Field(default="operativo", min_length=1, max_length=40)
+    monto: Importe
+    proveedor_id: Optional[int] = Field(default=None, gt=0)
+    fecha: Optional[datetime] = None
+
+    @field_validator("concepto")
+    @classmethod
+    def _sanear_concepto(cls, v: str) -> str:
+        return _texto_obligatorio(v)
+
+    @field_validator("categoria")
+    @classmethod
+    def _sanear_categoria(cls, v: str) -> str:
+        limpio = sanear_texto(v, 40).lower()
+        if not limpio:
+            raise ValueError("La categoría es obligatoria")
+        return limpio
 
 
 # ── Movimientos ──

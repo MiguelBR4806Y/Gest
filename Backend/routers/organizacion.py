@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from Backend.db.database import get_db
 from Backend.db.models import Usuario
-from Backend.routers.auth import verificar_token
+from Backend.routers.auth import requiere_admin, verificar_token
 from Backend.routers.facturas import (
     a_zona,
     carpeta_destino,
@@ -19,7 +19,11 @@ from Backend.routers.facturas import (
 from Backend.security import limitar
 from Backend.tiempo import ZONA_POR_DEFECTO
 
-router = APIRouter(prefix="/organizacion", tags=["Organización"])
+router = APIRouter(
+    prefix="/organizacion",
+    tags=["Organización"],
+    dependencies=[Depends(requiere_admin)],
+)
 
 # Niveles de navegación aceptados. Cualquier otro valor se rechaza.
 NIVELES = {"anio", "semestre", "trimestre", "mes", "semana", "dia", "factura"}

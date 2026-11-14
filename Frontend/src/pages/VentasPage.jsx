@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Ban, Calculator, Download, Eye, Minus, Package, Plus, ScanLine, Search,
-  ShoppingCart, Tag, Trash2, TrendingUp, XCircle,
+  ShoppingCart, Send, Tag, Trash2, TrendingUp, XCircle,
 } from "lucide-react";
 
 import Modal from "../components/Modal";
+import EnviarFacturaModal from "../components/EnviarFacturaModal";
 import { Button, IconButton } from "../components/ui/Button";
 import { Card, EmptyState, StatCard } from "../components/ui/Card";
 import { Field, Input, Select, Textarea } from "../components/ui/Field";
@@ -39,7 +40,7 @@ const hoyISO = () => {
 
 export default function VentasPage() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, esAdmin } = useAuth();
   const tasa = Number(user?.tasa_cambio) || 36;
 
   const [fecha, setFecha] = useState(hoyISO);
@@ -57,6 +58,7 @@ export default function VentasPage() {
   const [detalleAbierto, setDetalleAbierto] = useState(false);
   const [aAnular, setAAnular] = useState(null);
   const [motivo, setMotivo] = useState("");
+  const [aEnviar, setAEnviar] = useState(null);
 
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [cierre, setCierre] = useState(null);
@@ -64,6 +66,7 @@ export default function VentasPage() {
   const [clientes, setClientes] = useState([]);
   const [productos, setProductos] = useState([]);
   const [form, setForm] = useState({ cliente_id: "", metodo_pago: "efectivo" });
+  const [efectivoRecibido, setEfectivoRecibido] = useState("");
   const [items, setItems] = useState([]);
   const [productoSel, setProductoSel] = useState("");
   const [cantidad, setCantidad] = useState(1);
@@ -123,6 +126,7 @@ export default function VentasPage() {
       setProductos([]);
     }
     setForm({ cliente_id: "", metodo_pago: "efectivo" });
+    setEfectivoRecibido("");
     setItems([]);
     setProductoSel("");
     setCantidad(1);
@@ -208,9 +212,25 @@ export default function VentasPage() {
   }
 
   const totalVenta = items.reduce((s, i) => s + Number(i.precio) * i.cantidad, 0);
+  const esEfectivo = form.metodo_pago === "efectivo";
+  const recibidoNum = Number(efectivoRecibido);
+  const vuelto =
+    esEfectivo && efectivoRecibido !== "" && Number.isFinite(recibidoNum)
+      ? recibidoNum - totalVenta
+      : null;
+  const efectivoInvalido = esEfectivo && (efectivoRecibido === "" || vuelto < 0);
+  const faltaEfectivo = esEfectivo && efectivoRecibido === "";
 
   async function registrar() {
     if (items.length === 0) return;
+    if (faltaEfectivo) {
+      toast("Indica con cuánto pagó el cliente", "error");
+      return;
+    }
+    if (esEfectivo && vuelto < 0) {
+      toast("El efectivo recibido es menor que el total", "error");
+      return;
+    }
     setGuardando(true);
     try {
       // La clave evita que un reintento de red cree una segunda venta.
@@ -220,16 +240,19 @@ export default function VentasPage() {
         {
           cliente_id: form.cliente_id ? Number(form.cliente_id) : null,
           metodo_pago: form.metodo_pago,
+          efectivo_recibido: esEfectivo ? recibidoNum : null,
           items: items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
         },
         { headers: { "Idempotency-Key": clave } }
       );
       setClaveCobro(null);
       setNuevaAbierta(false);
+      const cambio =
+        r.vuelto !== null && r.vuelto !== undefined ? ` · Vuelto ${fmtMoney(r.vuelto)}` : "";
       toast(
         r.promos_aplicadas?.length
-          ? `Venta registrada. Promociones: ${r.promos_aplicadas.join(", ")}`
-          : "Venta registrada"
+          ? `Venta registrada${cambio}. Promociones: ${r.promos_aplicadas.join(", ")}`
+          : `Venta registrada${cambio}`
       );
       cargar();
     } catch (e) {
@@ -333,12 +356,16 @@ export default function VentasPage() {
           <p>Registro y control de transacciones</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" icon={Calculator} onClick={abrirCierre}>
-            Cierre de caja
-          </Button>
-          <Button variant="secondary" icon={Download} onClick={exportar}>
-            CSV
-          </Button>
+          {esAdmin && (
+            <>
+              <Button variant="secondary" icon={Calculator} onClick={abrirCierre}>
+                Cierre de caja
+              </Button>
+              <Button variant="secondary" icon={Download} onClick={exportar}>
+                CSV
+              </Button>
+            </>
+          )}
           <Button icon={Plus} onClick={abrirNueva} title="Nueva venta (F2)">
             Nueva venta
           </Button>
@@ -471,7 +498,12 @@ export default function VentasPage() {
                         <td className="td">
                           <div className="flex items-center justify-end gap-0.5">
                             <IconButton label="Ver detalle" icon={Eye} onClick={() => verDetalle(v)} />
-                            {!anulada && (
+                            <IconButton
+                              label="Enviar factura"
+                              icon={Send}
+                              onClick={() => setAEnviar(v)}
+                            />
+                            {!anulada && esAdmin && (
                               <IconButton
                                 label="Anular venta"
                                 icon={XCircle}
@@ -494,6 +526,12 @@ export default function VentasPage() {
         </Card>
       )}
 
+      <EnviarFacturaModal
+        venta={aEnviar}
+        open={Boolean(aEnviar)}
+        onClose={() => setAEnviar(null)}
+      />
+
       {/* Nueva venta */}
       <Modal
         open={nuevaAbierta}
@@ -508,7 +546,11 @@ export default function VentasPage() {
             <Button variant="secondary" onClick={() => setNuevaAbierta(false)} disabled={guardando}>
               Cancelar
             </Button>
-            <Button onClick={registrar} loading={guardando} disabled={items.length === 0}>
+            <Button
+              onClick={registrar}
+              loading={guardando}
+              disabled={items.length === 0 || efectivoInvalido}
+            >
               Cobrar {items.length > 0 && fmtMoney(totalVenta)}
             </Button>
           </>
@@ -544,7 +586,12 @@ export default function VentasPage() {
             >
               <Select
                 value={form.metodo_pago}
-                onChange={(e) => setForm((f) => ({ ...f, metodo_pago: e.target.value }))}
+                onChange={(e) => {
+                  const metodo = e.target.value;
+                  setForm((f) => ({ ...f, metodo_pago: metodo }));
+                  // El efectivo solo tiene sentido si se paga en efectivo.
+                  if (metodo !== "efectivo") setEfectivoRecibido("");
+                }}
               >
                 {METODOS.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -700,6 +747,70 @@ export default function VentasPage() {
               </table>
             </div>
           )}
+
+          {esEfectivo && (
+            <div className="mt-3 rounded-xl border border-border bg-surface-sunken p-3.5 space-y-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field
+                  label="Efectivo recibido (C$)"
+                  required
+                  error={vuelto !== null && vuelto < 0 ? "No alcanza para cubrir el total" : undefined}
+                >
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={efectivoRecibido}
+                    onChange={(e) => setEfectivoRecibido(e.target.value)}
+                    placeholder={totalVenta > 0 ? String(totalVenta.toFixed(2)) : "0.00"}
+                    autoFocus
+                  />
+                </Field>
+                <div>
+                  <span className="label">Vuelto</span>
+                  <p
+                    className={`text-xl font-bold tabular ${
+                      vuelto === null
+                        ? "text-content-subtle"
+                        : vuelto < 0
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-secondary-600 dark:text-secondary-400"
+                    }`}
+                  >
+                    {vuelto === null ? "—" : fmtMoney(Math.max(vuelto, 0))}
+                  </p>
+                  {vuelto !== null && vuelto < 0 && (
+                    <p className="text-xs text-red-600 dark:text-red-400">Faltan {fmtMoney(-vuelto)}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => setEfectivoRecibido(totalVenta.toFixed(2))}
+                >
+                  Pago exacto
+                </button>
+                {[50, 100, 200, 500, 1000].map((billete) => (
+                  <button
+                    key={billete}
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() =>
+                      setEfectivoRecibido(
+                        (Math.ceil(totalVenta / billete) * billete || billete).toFixed(2)
+                      )
+                    }
+                  >
+                    C${billete}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -739,6 +850,22 @@ export default function VentasPage() {
                   <BadgeEstado estado={detalle.estado} />
                 </dd>
               </div>
+              {detalle.efectivo_recibido !== null && detalle.efectivo_recibido !== undefined && (
+                <>
+                  <div>
+                    <dt className="text-content-muted text-xs">Efectivo recibido</dt>
+                    <dd className="text-content mt-0.5 tabular">
+                      {fmtMoney(detalle.efectivo_recibido)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-content-muted text-xs">Vuelto</dt>
+                    <dd className="text-secondary-600 dark:text-secondary-400 font-medium mt-0.5 tabular">
+                      {fmtMoney(detalle.vuelto ?? 0)}
+                    </dd>
+                  </div>
+                </>
+              )}
               <div>
                 <dt className="text-content-muted text-xs">Total</dt>
                 <dd className="text-content font-bold tabular mt-0.5">{fmtMoney(detalle.total)}</dd>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  History, Package, PackagePlus, Pencil, Plus, Search, Tag, Trash2,
+  FileDown, FileUp, History, Package, PackagePlus, Pencil, Plus, Search, Tag, Trash2,
 } from "lucide-react";
 
 import Modal, { ConfirmDialog } from "../components/Modal";
@@ -32,7 +32,7 @@ const etiquetaPromo = (promo) => {
 };
 
 export default function InventarioPage() {
-  const { user } = useAuth();
+  const { user, esAdmin } = useAuth();
   const { toast } = useToast();
   const tasa = Number(user?.tasa_cambio) || 36;
 
@@ -51,6 +51,12 @@ export default function InventarioPage() {
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
   const [aEliminar, setAEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
+
+  const [importAbierta, setImportAbierta] = useState(false);
+  const [importArchivo, setImportArchivo] = useState(null);
+  const [importModo, setImportModo] = useState("ambos");
+  const [importInforme, setImportInforme] = useState(null);
+  const [importando, setImportando] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -165,6 +171,39 @@ export default function InventarioPage() {
     }
   }
 
+  function abrirImportacion() {
+    setImportArchivo(null);
+    setImportModo("ambos");
+    setImportInforme(null);
+    setImportAbierta(true);
+  }
+
+  async function importar(simular) {
+    if (!importArchivo) {
+      toast("Selecciona un archivo CSV", "error");
+      return;
+    }
+    setImportando(true);
+    try {
+      const formData = new FormData();
+      formData.append("archivo", importArchivo);
+      const params = new URLSearchParams({ modo: importModo, simular: String(simular) });
+      const informe = await api.postForm(`/productos/importar?${params.toString()}`, formData);
+      setImportInforme(informe);
+      if (!simular) {
+        toast(
+          `${informe.creados} creados, ${informe.actualizados} actualizados, ${informe.ignorados} ignorados`,
+          informe.errores?.length ? "info" : undefined
+        );
+        cargar();
+      }
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setImportando(false);
+    }
+  }
+
   const filtrados = useMemo(() => {
     const q = busquedaDiferida.trim().toLowerCase();
     if (!q) return productos;
@@ -185,9 +224,21 @@ export default function InventarioPage() {
           <h1>Inventario</h1>
           <p>Control de productos y existencias</p>
         </div>
-        <Button icon={Plus} onClick={abrirNuevo}>
-          Agregar producto
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {esAdmin && (
+            <>
+              <Button variant="secondary" icon={FileUp} onClick={abrirImportacion}>
+                Importar CSV
+              </Button>
+              <Button variant="secondary" icon={FileDown} onClick={() => api.descargar("/productos/plantilla-csv", "catalogo_ejemplo.csv")}>
+                Plantilla
+              </Button>
+            </>
+          )}
+          <Button icon={Plus} onClick={abrirNuevo}>
+            Agregar producto
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -307,23 +358,29 @@ export default function InventarioPage() {
                         </td>
                         <td className="td">
                           <div className="flex items-center justify-end gap-0.5">
-                            <IconButton label="Editar" icon={Pencil} onClick={() => abrirEditar(p)} />
-                            <IconButton
-                              label="Recargar stock"
-                              icon={PackagePlus}
-                              onClick={() => setRecarga({ id: p.id, nombre: p.nombre, cantidad: 1 })}
-                            />
+                            {esAdmin && (
+                              <>
+                                <IconButton label="Editar" icon={Pencil} onClick={() => abrirEditar(p)} />
+                                <IconButton
+                                  label="Recargar stock"
+                                  icon={PackagePlus}
+                                  onClick={() => setRecarga({ id: p.id, nombre: p.nombre, cantidad: 1 })}
+                                />
+                              </>
+                            )}
                             <IconButton
                               label="Ver movimientos"
                               icon={History}
                               onClick={() => abrirHistorial(p)}
                             />
-                            <IconButton
-                              label="Eliminar"
-                              icon={Trash2}
-                              onClick={() => setAEliminar(p)}
-                              className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
-                            />
+                            {esAdmin && (
+                              <IconButton
+                                label="Eliminar"
+                                icon={Trash2}
+                                onClick={() => setAEliminar(p)}
+                                className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                              />
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -537,6 +594,108 @@ export default function InventarioPage() {
             </tbody>
           </table>
         )}
+      </Modal>
+
+      {/* Importar catálogo CSV */}
+      <Modal
+        open={importAbierta}
+        onClose={() => setImportAbierta(false)}
+        title="Importar catálogo CSV"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setImportAbierta(false)} disabled={importando}>
+              Cerrar
+            </Button>
+            <Button variant="secondary" onClick={() => importar(true)} loading={importando} disabled={!importArchivo}>
+              Previsualizar
+            </Button>
+            <Button onClick={() => importar(false)} loading={importando} disabled={!importArchivo}>
+              Importar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-content-muted">
+            El archivo debe tener una columna <span className="font-mono">nombre</span>. Se aceptan
+            también <span className="font-mono">categoría</span>,{" "}
+            <span className="font-mono">código de barras</span>, <span className="font-mono">stock</span>,{" "}
+            <span className="font-mono">stock mínimo</span>, <span className="font-mono">precio</span> y{" "}
+            <span className="font-mono">costo</span>. Separador <span className="font-mono">;</span> o{" "}
+            <span className="font-mono">,</span>.
+          </p>
+
+          <Field label="Archivo CSV" required>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                setImportArchivo(e.target.files?.[0] ?? null);
+                setImportInforme(null);
+              }}
+              className="input file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white cursor-pointer"
+            />
+          </Field>
+
+          <Field label="Modo" hint="Los productos se identifican por código de barras.">
+            <Select value={importModo} onChange={(e) => setImportModo(e.target.value)}>
+              <option value="ambos">Crear y actualizar</option>
+              <option value="crear">Solo crear (ignora existentes)</option>
+              <option value="actualizar">Solo actualizar (ignora nuevos)</option>
+            </Select>
+          </Field>
+
+          {importInforme && (
+            <div className="rounded-xl border border-border bg-surface-elevated/50 p-4 space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                <span className="badge-green">{importInforme.creados} creados</span>
+                <span className="badge-blue">{importInforme.actualizados} actualizados</span>
+                <span className="badge-neutral">{importInforme.ignorados} ignorados</span>
+                {importInforme.total_errores > 0 && (
+                  <span className="badge-red">{importInforme.total_errores} con error</span>
+                )}
+                {importInforme.simulado && <span className="badge-yellow">simulación</span>}
+              </div>
+
+              {importInforme.vista_previa?.length > 0 && (
+                <div className="overflow-x-auto max-h-56">
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <th className="th">Fila</th>
+                        <th className="th">Producto</th>
+                        <th className="th">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importInforme.vista_previa.map((f) => (
+                        <tr key={f.fila} className="table-row">
+                          <td className="td tabular text-content-subtle">{f.fila}</td>
+                          <td className="td truncate max-w-[14rem]">{f.nombre}</td>
+                          <td className="td">
+                            <span className={f.accion === "crear" ? "badge-green" : "badge-blue"}>
+                              {f.accion}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {importInforme.errores?.length > 0 && (
+                <ul className="text-xs text-red-600 dark:text-red-400 space-y-1 max-h-32 overflow-y-auto">
+                  {importInforme.errores.map((e) => (
+                    <li key={e.fila}>
+                      Fila {e.fila}: {e.motivo}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
 
       <ConfirmDialog

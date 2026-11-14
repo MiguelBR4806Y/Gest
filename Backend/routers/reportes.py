@@ -11,11 +11,14 @@ from Backend.ai.ia_service import analizar_ventas, responder_pregunta
 from Backend.db.database import get_db
 from Backend.db.models import ChatMensaje, Evento, Usuario
 from Backend.dinero import a_float, dinero, sumar
-from Backend.routers.auth import verificar_token
+from Backend.routers.auth import requiere_admin, requiere_modulo, verificar_token
 from Backend.security import limitar
 from Backend.tiempo import ZONA_POR_DEFECTO, a_local, fecha_de, hoy_local, rango_dia
 
-router = APIRouter(prefix="/reportes", tags=["Reportes"])
+router = APIRouter(
+    prefix="/reportes",
+    tags=["Reportes"],
+)
 
 DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
@@ -36,7 +39,7 @@ def _zona_usuario(session, usuario_id: int) -> str:
     ).scalar() or ZONA_POR_DEFECTO
 
 
-@router.get("/dashboard")
+@router.get("/dashboard", dependencies=[Depends(requiere_admin)])
 def dashboard(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         zona_horaria = _zona_usuario(session, usuario_id)
@@ -124,7 +127,7 @@ def dashboard(usuario_id: int = Depends(verificar_token)):
         }
 
 
-@router.get("/tendencia")
+@router.get("/tendencia", dependencies=[Depends(requiere_modulo("contabilidad"))])
 def tendencia(
     dias: int = Query(default=7, ge=1, le=30),
     usuario_id: int = Depends(verificar_token),
@@ -184,7 +187,7 @@ def tendencia(
         }
 
 
-@router.get("/ventas")
+@router.get("/ventas", dependencies=[Depends(requiere_modulo("contabilidad"))])
 async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         zona_horaria = _zona_usuario(session, usuario_id)
@@ -212,7 +215,7 @@ async def reporte_ventas(usuario_id: int = Depends(verificar_token)):
         return {"ventas": datos, "analisis_ia": analisis}
 
 
-@router.get("/predictivos")
+@router.get("/predictivos", dependencies=[Depends(requiere_modulo("contabilidad"))])
 def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         zona_horaria = _zona_usuario(session, usuario_id)
@@ -311,7 +314,7 @@ def reportes_predictivos(usuario_id: int = Depends(verificar_token)):
         }
 
 
-@router.get("/margenes")
+@router.get("/margenes", dependencies=[Depends(requiere_modulo("contabilidad"))])
 def reporte_margenes(
     desde: str = Query(default=None, max_length=10),
     hasta: str = Query(default=None, max_length=10),
@@ -419,7 +422,13 @@ def reporte_margenes(
         }
 
 
-@router.get("/exportar", dependencies=[Depends(limitar(10, 300, "exportar-csv"))])
+@router.get(
+    "/exportar",
+    dependencies=[
+        Depends(limitar(10, 300, "exportar-csv")),
+        Depends(requiere_modulo("contabilidad")),
+    ],
+)
 def exportar_csv(
     desde: str = Query(default=None, max_length=10),
     hasta: str = Query(default=None, max_length=10),
@@ -443,6 +452,7 @@ def exportar_csv(
         filas = session.execute(
             text("""
                 SELECT v.id, v.fecha_hora, v.metodo_pago, v.estado, v.total,
+                       v.efectivo_recibido, v.vuelto,
                        COALESCE(SUM(vi.costo_unitario * vi.cantidad), 0) AS costo,
                        COALESCE(c.nombre, 'Consumidor final') AS cliente,
                        COALESCE(STRING_AGG(p.nombre || ' x' || vi.cantidad, ' | '), '') AS productos
@@ -463,6 +473,7 @@ def exportar_csv(
         escritor.writerow([
             "Factura", "Fecha", "Hora", "Cliente", "Método de pago",
             "Estado", "Productos", "Total C$", "Costo C$", "Ganancia C$",
+            "Efectivo recibido C$", "Vuelto C$",
         ])
         for f in filas:
             local = a_local(f["fecha_hora"], zona_horaria)
@@ -477,6 +488,8 @@ def exportar_csv(
                 f"{dinero(f['total']):.2f}",
                 f"{dinero(f['costo']):.2f}",
                 f"{(dinero(f['total']) - dinero(f['costo'])):.2f}",
+                f"{dinero(f['efectivo_recibido']):.2f}" if f["efectivo_recibido"] is not None else "",
+                f"{dinero(f['vuelto']):.2f}" if f["vuelto"] is not None else "",
             ])
 
         nombre = f"ventas_{dia_desde}_{dia_hasta}.csv"
@@ -487,7 +500,7 @@ def exportar_csv(
         )
 
 
-@router.get("/eventos")
+@router.get("/eventos", dependencies=[Depends(requiere_admin)])
 def listar_eventos(
     usuario_id: int = Depends(verificar_token),
     limite: int = Query(default=50, ge=1, le=200),
@@ -509,7 +522,13 @@ def listar_eventos(
         } for e in eventos]
 
 
-@router.post("/chat", dependencies=[Depends(limitar(20, 300, "chat-ia"))])
+@router.post(
+    "/chat",
+    dependencies=[
+        Depends(limitar(20, 300, "chat-ia")),
+        Depends(requiere_modulo("contabilidad")),
+    ],
+)
 async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
@@ -582,7 +601,7 @@ async def chat_ia(body: PreguntaChat, usuario_id: int = Depends(verificar_token)
     return {"respuesta": respuesta}
 
 
-@router.get("/chat/historial")
+@router.get("/chat/historial", dependencies=[Depends(requiere_modulo("contabilidad"))])
 def historial_chat(
     usuario_id: int = Depends(verificar_token),
     limite: int = Query(default=50, ge=1, le=MAX_HISTORIAL),

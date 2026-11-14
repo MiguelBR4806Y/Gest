@@ -32,11 +32,17 @@ from Backend.db import inicializar_db  # noqa: E402
 from Backend.routers import (  # noqa: E402
     auth,
     clientes,
+    compras,
+    contabilidad,
+    empleados,
     facturas,
+    gastos,
     organizacion,
     productos,
     promociones,
+    proveedores,
     reportes,
+    vendedores,
     ventas,
 )
 from Backend.security import dentro_de  # noqa: E402
@@ -62,6 +68,8 @@ app = FastAPI(
 PREFIJOS_API = (
     "/productos", "/clientes", "/ventas", "/reportes",
     "/auth", "/facturas", "/organizacion", "/promociones",
+    "/vendedores", "/proveedores", "/gastos", "/compras", "/empleados",
+    "/contabilidad",
     "/img", "/assets", "/health",
 )
 
@@ -71,6 +79,7 @@ PREFIJOS_API = (
 RUTAS_SPA = frozenset({
     "/dashboard", "/inventario", "/ventas", "/clientes", "/promociones",
     "/organizacion", "/gesti", "/actividad", "/rentabilidad", "/reset",
+    "/vendedores", "/proveedores", "/gastos", "/compras", "/empleados", "/rrhh",
 })
 
 DIST = os.path.abspath("Frontend/dist")
@@ -200,6 +209,12 @@ app.include_router(auth.router)
 app.include_router(facturas.router)
 app.include_router(organizacion.router)
 app.include_router(promociones.router)
+app.include_router(vendedores.router)
+app.include_router(proveedores.router)
+app.include_router(gastos.router)
+app.include_router(compras.router)
+app.include_router(empleados.router)
+app.include_router(contabilidad.router)
 
 # ── Archivos estáticos del backend ──
 if os.path.isdir("img"):

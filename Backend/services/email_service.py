@@ -4,6 +4,7 @@ import os
 import secrets
 import smtplib
 from datetime import datetime, timezone
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from urllib.parse import quote
@@ -19,6 +20,10 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "noreply@bravosgest.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+# El apóstrofo va como escape fuera de las f-strings: Python 3.11 no admite
+# backslashes dentro de la expresión de un f-string (PEP 701 llega en 3.12).
+NOMBRE_POR_DEFECTO = "Bravo\u2019s Gest"
 
 # Minutos de validez del código de verificación de correo.
 CODIGO_MINUTOS_VALIDO = 15
@@ -47,7 +52,7 @@ def enviar_verificacion(destinatario: str, codigo: str, nombre_negocio: str) -> 
     # `nombre_negocio` viene del usuario: se escapa para no inyectar HTML en el correo.
     negocio = html.escape(nombre_negocio or "tu negocio", quote=True)
     anio = datetime.now(timezone.utc).year
-    asunto = f"Tu código de verificación - {nombre_negocio or 'Bravo\u2019s Gest'}"
+    asunto = f"Tu código de verificación - {nombre_negocio or NOMBRE_POR_DEFECTO}"
 
     texto_plano = f"""{asunto}
 
@@ -124,8 +129,31 @@ def enlace_reset(token: str) -> str:
     return f"{base}/reset?token={quote(token, safe='')}"
 
 
-def _enviar_mensaje(destinatario: str, asunto: str, texto_plano: str, html_cuerpo: str) -> bool:
-    msg = MIMEMultipart("alternative")
+def _enviar_mensaje(
+    destinatario: str,
+    asunto: str,
+    texto_plano: str,
+    html_cuerpo: str,
+    adjuntos: list[dict] | None = None,
+) -> bool:
+    """`adjuntos` = [{"nombre", "datos": bytes, "mime"}]."""
+    if adjuntos:
+        msg = MIMEMultipart("mixed")
+        alternativo = MIMEMultipart("alternative")
+        alternativo.attach(MIMEText(texto_plano, "plain", "utf-8"))
+        alternativo.attach(MIMEText(html_cuerpo, "html", "utf-8"))
+        msg.attach(alternativo)
+        for adjunto in adjuntos:
+            parte = MIMEApplication(adjunto["datos"], _subtype=adjunto.get("subtype", "pdf"))
+            parte.add_header(
+                "Content-Disposition", "attachment", filename=adjunto["nombre"]
+            )
+            msg.attach(parte)
+    else:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(texto_plano, "plain", "utf-8"))
+        msg.attach(MIMEText(html_cuerpo, "html", "utf-8"))
+
     msg["Subject"] = asunto
     msg["From"] = SMTP_FROM
     msg["To"] = destinatario
@@ -134,14 +162,85 @@ def _enviar_mensaje(destinatario: str, asunto: str, texto_plano: str, html_cuerp
         f"<{secrets.token_hex(8)}.{datetime.now(timezone.utc).timestamp()}@bravosgest.local>"
     )
     msg["MIME-Version"] = "1.0"
-    msg.attach(MIMEText(texto_plano, "plain", "utf-8"))
-    msg.attach(MIMEText(html_cuerpo, "html", "utf-8"))
 
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
         server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
         server.sendmail(SMTP_FROM, [destinatario], msg.as_string())
     return True
+
+
+def enviar_factura(
+    destinatario: str,
+    pdf_bytes: bytes,
+    nombre_negocio: str,
+    factura_id: int,
+    enlace: str | None = None,
+) -> bool:
+    """Envía la factura como PDF adjunto (y opcionalmente un enlace de descarga)."""
+    if not smtp_configurado():
+        logger.warning("SMTP no configurado; no se pudo enviar la factura")
+        return False
+
+    negocio = html.escape(nombre_negocio or "tu negocio", quote=True)
+    anio = datetime.now(timezone.utc).year
+    asunto = f"Factura #{factura_id} - {nombre_negocio or NOMBRE_POR_DEFECTO}"
+
+    bloque_enlace = ""
+    bloque_enlace_html = ""
+    if enlace:
+        enlace_html = html.escape(enlace, quote=True)
+        bloque_enlace = f"\nTambién puedes descargarla aquí:\n{enlace}\n"
+        bloque_enlace_html = (
+            '<div style="text-align:center;margin:20px 0">'
+            f'<a href="{enlace_html}" style="display:inline-block;background:#1D9E75;'
+            'color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;'
+            'padding:12px 24px;border-radius:8px">Descargar factura</a></div>'
+        )
+
+    texto_plano = f"""{asunto}
+
+Adjuntamos tu factura #{factura_id} de {nombre_negocio}.
+{bloque_enlace}
+Gracias por tu compra.
+
+© {anio} {nombre_negocio}
+"""
+
+    html_cuerpo = f"""<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 16px">
+<tr><td align="center">
+  <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden">
+    <tr><td style="padding:36px 32px 24px">
+      <h1 style="margin:0 0 16px;font-size:22px;color:#1a1a1a;font-weight:700;text-align:center">
+        Factura #{factura_id}
+      </h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#555;line-height:1.6;text-align:center">
+        Adjuntamos tu factura de <strong style="color:#1a1a1a">{negocio}</strong>.
+      </p>
+      {bloque_enlace_html}
+      <p style="margin:0;font-size:13px;color:#999;text-align:center">Gracias por tu compra.</p>
+    </td></tr>
+    <tr><td style="padding:16px 32px;background-color:#fafafa;border-top:1px solid #eee">
+      <p style="margin:0;font-size:12px;color:#aaa;text-align:center">© {anio} {negocio}</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>"""
+
+    adjuntos = [{
+        "nombre": f"factura_{factura_id}.pdf",
+        "datos": pdf_bytes,
+        "mime": "application/pdf",
+        "subtype": "pdf",
+    }]
+    try:
+        return _enviar_mensaje(destinatario, asunto, texto_plano, html_cuerpo, adjuntos)
+    except Exception:
+        logger.exception("Fallo al enviar la factura por correo")
+        return False
 
 
 def enviar_reset(destinatario: str, token: str, nombre_negocio: str) -> bool:
@@ -155,7 +254,7 @@ def enviar_reset(destinatario: str, token: str, nombre_negocio: str) -> bool:
 
     negocio = html.escape(nombre_negocio or "tu negocio", quote=True)
     anio = datetime.now(timezone.utc).year
-    asunto = f"Restablece tu contraseña - {nombre_negocio or 'Bravo\u2019s Gest'}"
+    asunto = f"Restablece tu contraseña - {nombre_negocio or NOMBRE_POR_DEFECTO}"
     enlace = enlace_reset(token)
     enlace_html = html.escape(enlace, quote=True)
 

@@ -8,14 +8,16 @@ import { Button, IconButton } from "../components/ui/Button";
 import { Card, EmptyState, StatCard } from "../components/ui/Card";
 import { Field, Input } from "../components/ui/Field";
 import { BadgeMetodoPago, TableSkeleton } from "../components/ui/Feedback";
+import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useDebounce } from "../hooks/useDebounce";
 import { api, formatFechaHora, fmtMoney } from "../lib/api";
 
-const VACIO = { nombre: "", telefono: "", credito_limite: 0 };
+const VACIO = { nombre: "", telefono: "", email: "", credito_limite: 0 };
 
 export default function ClientesPage() {
   const { toast } = useToast();
+  const { esAdmin } = useAuth();
 
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -66,6 +68,7 @@ export default function ClientesPage() {
     setForm({
       nombre: c.nombre,
       telefono: c.telefono ?? "",
+      email: c.email ?? "",
       credito_limite: c.credito_limite ?? 0,
     });
     setAbierta(true);
@@ -78,6 +81,7 @@ export default function ClientesPage() {
       const cuerpo = {
         nombre: form.nombre.trim(),
         telefono: form.telefono.trim() || null,
+        email: form.email.trim() || null,
         credito_limite: Number(form.credito_limite) || 0,
       };
       if (editando) {
@@ -170,7 +174,7 @@ export default function ClientesPage() {
           <h1>Clientes</h1>
           <p>{clientes.length} registrados</p>
         </div>
-        <Button icon={Plus} onClick={abrirNuevo}>
+        <Button icon={Plus} onClick={abrirNuevo} disabled={!esAdmin}>
           Agregar cliente
         </Button>
       </div>
@@ -222,7 +226,7 @@ export default function ClientesPage() {
                   : "Prueba con otro término de búsqueda."
               }
               action={
-                clientes.length === 0 && (
+                clientes.length === 0 && esAdmin && (
                   <Button size="sm" icon={Plus} onClick={abrirNuevo}>
                     Agregar cliente
                   </Button>
@@ -276,7 +280,7 @@ export default function ClientesPage() {
                         </td>
                         <td className="td">
                           <div className="flex items-center justify-end gap-0.5">
-                            {usado > 0 && (
+                            {esAdmin && usado > 0 && (
                               <IconButton
                                 label="Registrar abono"
                                 icon={HandCoins}
@@ -288,22 +292,26 @@ export default function ClientesPage() {
                                 className="text-secondary-600 dark:text-secondary-400 hover:bg-secondary-500/10"
                               />
                             )}
-                            <IconButton
-                              label="Editar"
-                              icon={Pencil}
-                              onClick={() => abrirEditar(c)}
-                            />
+                            {esAdmin && (
+                              <IconButton
+                                label="Editar"
+                                icon={Pencil}
+                                onClick={() => abrirEditar(c)}
+                              />
+                            )}
                             <IconButton
                               label="Ver historial de compras"
                               icon={History}
                               onClick={() => abrirCompras(c)}
                             />
-                            <IconButton
-                              label="Eliminar"
-                              icon={Trash2}
-                              onClick={() => setAEliminar(c)}
-                              className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
-                            />
+                            {esAdmin && (
+                              <IconButton
+                                label="Eliminar"
+                                icon={Trash2}
+                                onClick={() => setAEliminar(c)}
+                                className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                              />
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -349,6 +357,17 @@ export default function ClientesPage() {
               placeholder="Ej: 8888-8888"
               maxLength={32}
               inputMode="tel"
+            />
+          </Field>
+
+          <Field label="Correo" hint="Se usa para enviarle su factura por correo.">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              placeholder="cliente@correo.com"
+              maxLength={254}
+              autoComplete="off"
             />
           </Field>
 

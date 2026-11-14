@@ -11,10 +11,20 @@ from Backend.db.database import get_db
 from Backend.db.models import Cliente, Movimiento, Producto, Usuario, Venta, VentaItem
 from Backend.dinero import a_float, dinero, multiplicar, porcentaje, sumar
 from Backend.models.schema import AnularVenta, VentaCrear
-from Backend.routers.auth import verificar_token
+from Backend.routers.auth import (
+    SesionActual,
+    requiere_admin,
+    requiere_modulo,
+    sesion_actual,
+    verificar_token,
+)
 from Backend.tiempo import ZONA_POR_DEFECTO, fecha_de, rango_dia
 
-router = APIRouter(prefix="/ventas", tags=["Ventas"])
+router = APIRouter(
+    prefix="/ventas",
+    tags=["Ventas"],
+    dependencies=[Depends(requiere_modulo("ventas"))],
+)
 
 MAX_VENTAS_LISTADAS = 500
 
@@ -65,9 +75,37 @@ def _respuesta_venta(v: Venta, repetida: bool = False) -> dict:
         "id": v.id,
         "total": a_float(v.total),
         "estado": v.estado,
+        "metodo_pago": v.metodo_pago,
+        "efectivo_recibido": a_float(v.efectivo_recibido) if v.efectivo_recibido is not None else None,
+        "vuelto": a_float(v.vuelto) if v.vuelto is not None else None,
         "promos_aplicadas": [],
         "repetida": repetida,
     }
+
+
+def _calcular_vuelto(metodo_pago: str, recibido, total) -> tuple[Decimal | None, Decimal | None]:
+    """Devuelve (efectivo_recibido, vuelto) validando el cobro en efectivo.
+
+    El total lo calcula siempre el servidor, así que el vuelto no puede
+    falsearse desde el cliente. En otros métodos ambos quedan en None.
+
+    Si no se indica el efectivo se asume **pago exacto** (recibido = total,
+    vuelto = 0): las integraciones anteriores y las ventas por API siguen
+    funcionando. El POS exige escribirlo.
+    """
+    if metodo_pago != "efectivo":
+        return None, None
+
+    if recibido is None:
+        return total, dinero(0)
+
+    entregado = dinero(recibido)
+    if entregado < total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El efectivo recibido (C${entregado}) es menor que el total (C${total})",
+        )
+    return entregado, dinero(entregado - total)
 
 
 def _agrupar_items(items) -> dict[int, int]:
@@ -85,9 +123,10 @@ def _agrupar_items(items) -> dict[int, int]:
 @router.post("/")
 def crear_venta(
     venta: VentaCrear,
-    usuario_id: int = Depends(verificar_token),
+    sesion: SesionActual = Depends(sesion_actual),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    usuario_id = sesion.negocio_id
     clave = _validar_idempotency_key(idempotency_key)
 
     with get_db() as session:
@@ -139,6 +178,10 @@ def crear_venta(
         total = sumar(r[3] for r in resueltos)
         promos_aplicadas = [f"{r[0].nombre}: {r[4]}" for r in resueltos if r[4]]
 
+        efectivo, vuelto = _calcular_vuelto(
+            venta.metodo_pago, venta.efectivo_recibido, total
+        )
+
         cliente = None
         if venta.cliente_id:
             cliente = session.query(Cliente).filter(
@@ -160,8 +203,13 @@ def crear_venta(
         v = Venta(
             usuario_id=usuario_id,
             cliente_id=venta.cliente_id,
+            # Se guarda la cuenta que cobró, no el dueño: así el reporte por
+            # vendedor distingue al admin de sus vendedores.
+            vendedor_id=sesion.usuario_id,
             total=total,
             metodo_pago=venta.metodo_pago,
+            efectivo_recibido=efectivo,
+            vuelto=vuelto,
             estado="completada",
             idempotency_key=clave,
         )
@@ -229,12 +277,15 @@ def crear_venta(
             "id": venta_id,
             "total": a_float(total),
             "estado": "completada",
+            "metodo_pago": venta.metodo_pago,
+            "efectivo_recibido": a_float(efectivo) if efectivo is not None else None,
+            "vuelto": a_float(vuelto) if vuelto is not None else None,
             "promos_aplicadas": promos_aplicadas,
             "repetida": False,
         }
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(requiere_admin)])
 def anular_venta(
     id: int,
     datos: AnularVenta | None = None,
@@ -410,7 +461,7 @@ def resumen_dia(
         }
 
 
-@router.get("/cierre")
+@router.get("/cierre", dependencies=[Depends(requiere_admin)])
 def cierre_caja(
     usuario_id: int = Depends(verificar_token),
     fecha: str = Query(default=None, max_length=10),
@@ -551,7 +602,9 @@ def listar_ventas(
         filas = session.execute(
             text(f"""
                 SELECT v.id, v.total, v.fecha_hora, v.metodo_pago, v.estado,
+                       v.efectivo_recibido, v.vuelto,
                        c.nombre AS cliente_nombre,
+                       COALESCE(uv.nombre, uv.usuario) AS vendedor_nombre,
                        (
                            SELECT STRING_AGG(p.nombre || ' (x' || vi.cantidad || ')', ', ')
                            FROM venta_items vi
@@ -560,6 +613,7 @@ def listar_ventas(
                        ) AS productos
                 FROM ventas v
                 LEFT JOIN clientes c ON v.cliente_id = c.id
+                LEFT JOIN usuarios uv ON v.vendedor_id = uv.id
                 WHERE {where}
                 ORDER BY v.fecha_hora DESC
                 LIMIT :limite OFFSET :offset
@@ -582,9 +636,12 @@ def obtener_venta(id: int, usuario_id: int = Depends(verificar_token)):
             text("""
                 SELECT v.id, v.total, v.fecha_hora, v.metodo_pago, v.estado,
                        v.motivo_anulacion, v.anulada_en, v.anulada_por,
-                       c.nombre AS cliente_nombre
+                       v.efectivo_recibido, v.vuelto,
+                       c.nombre AS cliente_nombre,
+                       COALESCE(uv.nombre, uv.usuario) AS vendedor_nombre
                 FROM ventas v
                 LEFT JOIN clientes c ON v.cliente_id = c.id
+                LEFT JOIN usuarios uv ON v.vendedor_id = uv.id
                 WHERE v.id = :vid AND v.usuario_id = :uid
             """),
             {"vid": id, "uid": usuario_id},

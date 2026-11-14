@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  Activity, Bot, ChevronLeft, FolderOpen, LayoutDashboard, LogOut, Mail, Percent,
-  Menu, Monitor, Moon, Package, Settings, ShoppingCart, Sun,
-  Tag, Users, X, AlertTriangle,
+  Activity, Bot, Calculator, ChevronDown, ChevronLeft, ChevronsRight, FolderOpen,
+  LayoutDashboard, LogOut, Mail, Percent, Menu, Monitor, Moon, Package, Receipt,
+  Settings, ShoppingCart, Sun, Truck, UserCog, Tag, Users, X, AlertTriangle, Wallet,
+  UsersRound,
 } from "lucide-react";
 
 import SettingsModal from "./SettingsModal";
@@ -17,36 +18,57 @@ import { aplicarColorAcento } from "../lib/color";
 const NAV = [
   {
     grupo: "Principal",
-    items: [{ to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" }],
+    items: [{ to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", soloAdmin: true }],
   },
   {
     grupo: "Operación",
+    modulo: "ventas",
     items: [
       { to: "/ventas", icon: ShoppingCart, label: "Ventas" },
       { to: "/inventario", icon: Package, label: "Inventario" },
       { to: "/clientes", icon: Users, label: "Clientes" },
-      { to: "/promociones", icon: Tag, label: "Promociones" },
+      { to: "/promociones", icon: Tag, label: "Promociones", soloAdmin: true },
     ],
   },
   {
-    grupo: "Análisis",
+    grupo: "Contabilidad",
+    modulo: "contabilidad",
     items: [
+      { to: "/contabilidad", icon: Calculator, label: "Resumen" },
+      { to: "/gastos", icon: Wallet, label: "Gastos" },
+      { to: "/compras", icon: Receipt, label: "Compras" },
+      { to: "/proveedores", icon: Truck, label: "Proveedores" },
       { to: "/rentabilidad", icon: Percent, label: "Rentabilidad" },
+    ],
+  },
+  {
+    grupo: "RRHH",
+    modulo: "rrhh",
+    items: [{ to: "/rrhh", icon: UsersRound, label: "Plantilla y nómina" }],
+  },
+  {
+    grupo: "Análisis",
+    soloAdmin: true,
+    items: [
       { to: "/gesti", icon: Bot, label: "Gesti IA" },
       { to: "/actividad", icon: Activity, label: "Actividad" },
     ],
   },
   {
     grupo: "Documentos",
+    soloAdmin: true,
     items: [{ to: "/organizacion", icon: FolderOpen, label: "Organización" }],
+  },
+  {
+    grupo: "Administración",
+    soloAdmin: true,
+    items: [{ to: "/vendedores", icon: UserCog, label: "Vendedores" }],
   },
 ];
 
-const NAV_PLANO = NAV.flatMap((g) => g.items);
-
 // Accesos del pulgar para móvil: el resto vive en el drawer.
 const NAV_MOVIL = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Inicio" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Inicio", soloAdmin: true },
   { to: "/ventas", icon: ShoppingCart, label: "Ventas" },
   { to: "/inventario", icon: Package, label: "Stock" },
   { to: "/clientes", icon: Users, label: "Clientes" },
@@ -55,17 +77,46 @@ const NAV_MOVIL = [
 const TEMA_ETIQUETA = { system: "Tema del sistema", dark: "Modo oscuro", light: "Modo claro" };
 const TEMA_ICONO = { system: Monitor, dark: Moon, light: Sun };
 
+const CLAVE_GRUPOS = "navGruposAbiertos";
+
+/** Grupos plegados: por defecto todos abiertos. */
+function leerGruposCerrados() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_GRUPOS) || "[]");
+    return new Set(Array.isArray(guardado) ? guardado : []);
+  } catch {
+    return new Set();
+  }
+}
+
 export default function Layout({ children }) {
-  const { user, logout } = useAuth();
+  const { user, esAdmin, puede, logout } = useAuth();
   const { toast } = useToast();
   const [, tema, ciclarTema] = useTheme();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  // El vendedor solo ve Ventas e Inventario; contabilidad y RRHH aparecen si
+  // la cuenta tiene el módulo. Lo que no se ve, el backend igual lo rechaza.
+  const navVisible = useMemo(() => {
+    const visible = (item) =>
+      esAdmin || (item.modulo ? puede(item.modulo) : !item.soloAdmin);
+
+    return NAV.filter((g) => esAdmin || !g.soloAdmin || (g.modulo && puede(g.modulo)))
+      .map((g) => ({ ...g, items: g.items.filter(visible) }))
+      .filter((g) => g.items.length > 0);
+  }, [esAdmin, puede]);
+
+  const navPlanoVisible = useMemo(() => navVisible.flatMap((g) => g.items), [navVisible]);
+  const navMovilVisible = useMemo(
+    () => NAV_MOVIL.filter((i) => esAdmin || !i.soloAdmin),
+    [esAdmin]
+  );
   const [drawerAbierto, setDrawerAbierto] = useState(false);
   const [colapsado, setColapsado] = useState(
     () => localStorage.getItem("sidebarCollapsed") === "true"
   );
+  const [gruposCerrados, setGruposCerrados] = useState(leerGruposCerrados);
   const [ajustesAbierto, setAjustesAbierto] = useState(false);
   const [ajustesSeccion, setAjustesSeccion] = useState("perfil");
   const [alertaCorreoOculta, setAlertaCorreoOculta] = useState(
@@ -73,8 +124,8 @@ export default function Layout({ children }) {
   );
 
   const titulo = useMemo(
-    () => NAV_PLANO.find((n) => pathname.startsWith(n.to))?.label ?? "Bravo's Gest",
-    [pathname]
+    () => navPlanoVisible.find((n) => pathname.startsWith(n.to))?.label ?? "Bravo's Gest",
+    [pathname, navPlanoVisible]
   );
 
   const fechaHoy = useMemo(
@@ -90,6 +141,42 @@ export default function Layout({ children }) {
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(colapsado));
   }, [colapsado]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_GRUPOS, JSON.stringify([...gruposCerrados]));
+    } catch {
+      /* localStorage puede estar bloqueado */
+    }
+  }, [gruposCerrados]);
+
+  // Cada grupo se abre y se cierra desde su cabecera. La ruta activa se
+  // despliega sola para que el usuario siempre vea dónde está.
+  const grupoDeRuta = useMemo(
+    () => navVisible.find((g) => g.items.some((i) => pathname.startsWith(i.to)))?.grupo,
+    [navVisible, pathname]
+  );
+
+  const alternarGrupo = useCallback((nombre) => {
+    setGruposCerrados((actuales) => {
+      const siguiente = new Set(actuales);
+      if (siguiente.has(nombre)) siguiente.delete(nombre);
+      else siguiente.add(nombre);
+      return siguiente;
+    });
+  }, []);
+
+  // Al navegar a otra sección, su grupo se despliega. Solo reacciona al cambio
+  // de ruta: cerrar un grupo a mano no lo reabre.
+  useEffect(() => {
+    if (!grupoDeRuta) return;
+    setGruposCerrados((actuales) => {
+      if (!actuales.has(grupoDeRuta)) return actuales;
+      const siguiente = new Set(actuales);
+      siguiente.delete(grupoDeRuta);
+      return siguiente;
+    });
+  }, [pathname, grupoDeRuta]);
 
   // Drawer móvil: se cierra con Escape y al cambiar de ruta.
   useEffect(() => {
@@ -131,10 +218,12 @@ export default function Layout({ children }) {
 
   const IconoTema = TEMA_ICONO[tema] ?? Monitor;
 
-  const sidebar = (
+  // `compacto` se pasa como argumento: el drawer móvil se dibuja siempre
+  // expandido aunque el sidebar de escritorio esté contraído.
+  const sidebar = (compacto) => (
     <div className="flex flex-col h-full bg-surface-card border-r border-border">
       {/* Cabecera del sidebar */}
-      <div className={`flex items-center gap-3 border-b border-border h-16 shrink-0 ${colapsado ? "justify-center px-2" : "px-4"}`}>
+      <div className={`flex items-center gap-3 border-b border-border h-16 shrink-0 ${compacto ? "justify-center px-2" : "px-4"}`}>
         <div
           className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center font-bold text-sm shrink-0 shadow-glow-sm"
           style={{ color: "rgb(var(--brand-contrast, 255 255 255))" }}
@@ -142,17 +231,19 @@ export default function Layout({ children }) {
         >
           {user?.nombre_negocio?.slice(0, 2).toUpperCase() || "BG"}
         </div>
-        {!colapsado && (
+        {!compacto && (
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-content truncate">
               {user?.nombre_negocio || "Mi Negocio"}
             </p>
             <p className="text-xs text-content-subtle truncate">
-              {user?.email || `@${user?.usuario}`}
+              {user?.rol === "vendedor"
+                ? `${user?.nombre || user?.usuario} · vendedor`
+                : user?.email || `@${user?.usuario}`}
             </p>
           </div>
         )}
-        {!colapsado && (
+        {!compacto && (
           <IconButton
             label="Contraer menú"
             icon={ChevronLeft}
@@ -163,75 +254,107 @@ export default function Layout({ children }) {
       </div>
 
       {/* Navegación */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-4" aria-label="Navegación principal">
-        {NAV.map((grupo) => (
-          <div key={grupo.grupo} className="space-y-0.5">
-            {!colapsado && (
-              <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-content-subtle">
-                {grupo.grupo}
-              </p>
-            )}
-            {colapsado && <div className="mx-2 mb-1.5 h-px bg-border/70" aria-hidden="true" />}
-            {grupo.items.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                title={colapsado ? label : undefined}
-                className={({ isActive }) =>
-                  `nav-item ${isActive ? "nav-item-active" : "nav-item-idle"} ${
-                    colapsado ? "justify-center px-0" : ""
-                  }`
-                }
-              >
-                <Icon size={18} className="shrink-0" aria-hidden="true" />
-                {!colapsado && <span className="truncate">{label}</span>}
-              </NavLink>
-            ))}
-          </div>
-        ))}
+      <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-2" aria-label="Navegación principal">
+        {navVisible.map((grupo) => {
+          const abierto = !gruposCerrados.has(grupo.grupo);
+          const contieneRuta = grupoDeRuta === grupo.grupo;
+
+          return (
+            <div key={grupo.grupo}>
+              {compacto ? (
+                // Contraído no caben los títulos: separa los grupos con una línea.
+                <div className="mx-2 mb-1.5 h-px bg-border/70" aria-hidden="true" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => alternarGrupo(grupo.grupo)}
+                  aria-expanded={abierto}
+                  title={abierto ? `Ocultar ${grupo.grupo}` : `Mostrar ${grupo.grupo}`}
+                  className={`group flex w-full items-center gap-1.5 rounded-md px-3 py-1.5
+                              text-[10px] font-semibold uppercase tracking-[0.12em]
+                              transition-colors hover:bg-surface-hover ${
+                                contieneRuta && !abierto
+                                  ? "text-brand-700 dark:text-brand-300"
+                                  : "text-content-subtle hover:text-content-muted"
+                              }`}
+                >
+                  <span className="flex-1 text-left">{grupo.grupo}</span>
+                  <ChevronDown
+                    size={12}
+                    aria-hidden="true"
+                    className={`shrink-0 transition-transform duration-200 ${
+                      abierto ? "" : "-rotate-90"
+                    }`}
+                  />
+                </button>
+              )}
+
+              <div hidden={!abierto && !compacto} className="space-y-0.5 pt-0.5">
+                {grupo.items.map(({ to, icon: Icon, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    title={compacto ? label : undefined}
+                    className={({ isActive }) =>
+                      `nav-item ${isActive ? "nav-item-active" : "nav-item-idle"} ${
+                        compacto ? "justify-center px-0" : ""
+                      }`
+                    }
+                  >
+                    <Icon size={18} className="shrink-0" aria-hidden="true" />
+                    {!compacto && <span className="truncate">{label}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </nav>
 
       {/* Pie del sidebar */}
-      <div className={`border-t border-border py-3 shrink-0 ${colapsado ? "px-2 space-y-0.5" : "px-2.5 space-y-0.5"}`}>
+      <div className="border-t border-border py-3 shrink-0 px-2.5 space-y-0.5">
         <button
           type="button"
           onClick={ciclarTema}
-          title={colapsado ? TEMA_ETIQUETA[tema] : undefined}
-          className={`nav-item nav-item-idle w-full ${colapsado ? "justify-center px-0" : ""}`}
+          title={compacto ? TEMA_ETIQUETA[tema] : undefined}
+          className={`nav-item nav-item-idle w-full ${compacto ? "justify-center px-0" : ""}`}
         >
           <IconoTema size={18} className="shrink-0" aria-hidden="true" />
-          {!colapsado && <span>{TEMA_ETIQUETA[tema]}</span>}
+          {!compacto && <span>{TEMA_ETIQUETA[tema]}</span>}
         </button>
 
         <button
           type="button"
           onClick={() => abrirAjustes("perfil")}
-          title={colapsado ? "Configuración" : undefined}
-          className={`nav-item nav-item-idle w-full ${colapsado ? "justify-center px-0" : ""}`}
+          title={compacto ? "Configuración" : undefined}
+          className={`nav-item nav-item-idle w-full ${compacto ? "justify-center px-0" : ""}`}
         >
           <Settings size={18} className="shrink-0" aria-hidden="true" />
-          {!colapsado && <span>Configuración</span>}
+          {!compacto && <span>Configuración</span>}
         </button>
 
         <button
           type="button"
           onClick={cerrarSesion}
-          title={colapsado ? "Cerrar sesión" : undefined}
+          title={compacto ? "Cerrar sesión" : undefined}
           className={`nav-item w-full text-content-muted hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 ${
-            colapsado ? "justify-center px-0" : ""
+            compacto ? "justify-center px-0" : ""
           }`}
         >
           <LogOut size={18} className="shrink-0" aria-hidden="true" />
-          {!colapsado && <span>Cerrar sesión</span>}
+          {!compacto && <span>Cerrar sesión</span>}
         </button>
 
-        {colapsado && (
-          <IconButton
-            label="Expandir menú"
-            icon={Menu}
+        {compacto && (
+          <button
+            type="button"
             onClick={() => setColapsado(false)}
-            className="hidden lg:inline-flex mx-auto"
-          />
+            title="Expandir menú"
+            aria-label="Expandir menú"
+            className="nav-item nav-item-idle w-full justify-center px-0 hidden lg:flex"
+          >
+            <ChevronsRight size={18} className="shrink-0" aria-hidden="true" />
+          </button>
         )}
       </div>
     </div>
@@ -245,7 +368,7 @@ export default function Layout({ children }) {
           colapsado ? "w-16" : "w-64"
         }`}
       >
-        {sidebar}
+        {sidebar(colapsado)}
       </aside>
 
       {/* Drawer en móvil */}
@@ -275,7 +398,7 @@ export default function Layout({ children }) {
             onClick={() => setDrawerAbierto(false)}
             className="absolute top-4 right-3 z-10"
           />
-          {sidebar}
+          {sidebar(false)}
         </aside>
       </div>
 
@@ -323,13 +446,18 @@ export default function Layout({ children }) {
               </span>
               <span className="hidden sm:block text-sm text-content-muted max-w-[10rem] truncate">
                 {user?.usuario}
+                {user?.rol === "vendedor" && (
+                  <span className="ml-1.5 text-[10px] uppercase tracking-wide text-content-subtle">
+                    vendedor
+                  </span>
+                )}
               </span>
             </button>
           </div>
         </header>
 
         <main id="contenido" className="flex-1 overflow-y-auto p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-8">
-          {user && !alertaCorreoOculta && !user.email && (
+          {esAdmin && user && !alertaCorreoOculta && !user.email && (
             <AvisoCompletarPerfil
               onConfigurar={() => abrirAjustes("seguridad")}
               onCerrar={() => {
@@ -339,7 +467,7 @@ export default function Layout({ children }) {
             />
           )}
 
-          {user && !alertaCorreoOculta && user.email && !user.email_verified && (
+          {esAdmin && user && !alertaCorreoOculta && user.email && !user.email_verified && (
             <AvisoVerificarCorreo
               onVerificar={() => abrirAjustes("seguridad")}
               onCerrar={() => {
@@ -358,8 +486,11 @@ export default function Layout({ children }) {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navegación rápida"
       >
-        <div className="grid grid-cols-5">
-          {NAV_MOVIL.map(({ to, icon: Icon, label }) => (
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `repeat(${navMovilVisible.length + 1}, minmax(0, 1fr))` }}
+        >
+          {navMovilVisible.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}

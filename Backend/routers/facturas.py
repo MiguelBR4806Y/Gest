@@ -1,10 +1,14 @@
+import hashlib
 import os
 import re
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote as urlquote
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -19,21 +23,35 @@ from reportlab.platypus import (
 )
 from sqlalchemy import text
 
+from Backend.auditoria import registrar_evento
 from Backend.db.database import get_db
-from Backend.db.models import Usuario
+from Backend.db.models import EnlaceFactura, Usuario
 from Backend.dinero import dinero
-from Backend.routers.auth import verificar_token
-from Backend.security import es_color_hex, escapar_xml, sanear_texto
+from Backend.routers.auth import requiere_admin, requiere_modulo, verificar_token
+from Backend.security import es_color_hex, escapar_xml, limitar, sanear_texto
+from Backend.services.email_service import enviar_factura, smtp_configurado
 from Backend.tiempo import ZONA_POR_DEFECTO, a_local
 
 load_dotenv()
 
 FACTURAS_DIR = "facturas"
 NOMBRE_NEGOCIO = os.getenv("NOMBRE_NEGOCIO", "Mi Negocio")
+# Base de las URLs de descarga que se envían al cliente final.
+PUBLIC_BASE_URL = (
+    os.getenv("PUBLIC_BASE_URL") or os.getenv("FRONTEND_URL") or "http://localhost:5173"
+).rstrip("/")
+
+# Días que vive un enlace de factura compartido por WhatsApp.
+ENLACE_DIAS_VALIDO = 7
+PREFIJO_PAIS = "505"
 
 DIAS_ES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
 
 router = APIRouter(prefix="/facturas", tags=["Facturas"])
+
+# Ver y enviar facturas lo necesita quien vende. La descarga por token es
+# pública a propósito y no lleva esta dependencia.
+_VENTAS = [Depends(requiere_modulo("ventas"))]
 
 
 def fmt(valor) -> str:
@@ -180,6 +198,20 @@ def generar_pdf(
     ]))
 
     elementos.append(tabla)
+
+    # Detalle del cobro en efectivo, si lo hubo.
+    efectivo = venta.get("efectivo_recibido")
+    vuelto = venta.get("vuelto")
+    if efectivo is not None:
+        elementos.append(Spacer(1, 0.15 * inch))
+        elementos.append(Paragraph(
+            f"<b>Efectivo recibido:</b> C$ {fmt(efectivo)}", styles["Normal"]
+        ))
+        if vuelto is not None:
+            elementos.append(Paragraph(
+                f"<b>Vuelto:</b> C$ {fmt(vuelto)}", styles["Normal"]
+            ))
+
     elementos.append(Spacer(1, 0.3 * inch))
     elementos.append(Paragraph("Gracias por su compra.", styles["Normal"]))
 
@@ -187,7 +219,87 @@ def generar_pdf(
     return path
 
 
-@router.get("/preview")
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _datos_venta(session, venta_id: int, usuario_id: int) -> tuple[dict, list[dict]]:
+    venta = session.execute(
+        text("""
+            SELECT v.id, v.total, v.fecha_hora, v.estado,
+                   v.efectivo_recibido, v.vuelto,
+                   c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
+                   c.email AS cliente_email
+            FROM ventas v
+            LEFT JOIN clientes c ON v.cliente_id = c.id
+            WHERE v.id = :vid AND v.usuario_id = :uid
+        """),
+        {"vid": venta_id, "uid": usuario_id},
+    ).mappings().first()
+
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    items = session.execute(
+        text("""
+            SELECT p.nombre, vi.cantidad, vi.precio_unitario
+            FROM venta_items vi
+            JOIN productos p ON vi.producto_id = p.id
+            JOIN ventas v ON vi.venta_id = v.id
+            WHERE vi.venta_id = :vid AND v.usuario_id = :uid
+        """),
+        {"vid": venta_id, "uid": usuario_id},
+    ).mappings().fetchall()
+
+    return dict(venta), [dict(i) for i in items]
+
+
+def _generar_archivo(session, venta_id: int, usuario_id: int) -> tuple[str, dict]:
+    """Genera (o regenera) el PDF y devuelve su ruta junto a los datos de venta."""
+    config = get_config_negocio(session, usuario_id)
+    venta_dict, items_list = _datos_venta(session, venta_id, usuario_id)
+    path = generar_pdf(
+        venta_id, venta_dict, items_list, config["nombre_negocio"],
+        config["color_acento"], config["logo_path"], config["tasa_cambio"],
+        config["zona_horaria"], venta_dict.get("estado", "completada"),
+    )
+    return path, venta_dict
+
+
+def _normalizar_telefono(telefono: str | None) -> str:
+    """Deja solo dígitos y añade el prefijo de país si parece local."""
+    digitos = re.sub(r"\D", "", telefono or "")
+    if not digitos:
+        return ""
+    if len(digitos) == 8:
+        return PREFIJO_PAIS + digitos
+    return digitos
+
+
+def _crear_enlace(session, usuario_id: int, venta_id: int) -> dict:
+    token = secrets.token_urlsafe(24)
+    expira = datetime.now(timezone.utc) + timedelta(days=ENLACE_DIAS_VALIDO)
+    enlace = EnlaceFactura(
+        usuario_id=usuario_id,
+        venta_id=venta_id,
+        token_hash=_hash_token(token),
+        expira=expira,
+    )
+    session.add(enlace)
+    session.flush()
+    return {
+        "url": f"{PUBLIC_BASE_URL}/facturas/descarga/{token}",
+        "token": token,
+        "expira": expira.isoformat(),
+    }
+
+
+class EnvioFactura(BaseModel):
+    canal: str = Field(pattern="^(email|whatsapp)$")
+    destinatario: str | None = Field(default=None, max_length=254)
+
+
+@router.get("/preview", dependencies=[Depends(requiere_admin)])
 def previsualizar_factura(
     nombre_negocio: str = Query(default="Mi Negocio"),
     color_acento: str = Query(default="#1D9E75"),
@@ -212,42 +324,137 @@ def previsualizar_factura(
     return FileResponse(path, media_type="application/pdf")
 
 
-@router.get("/{venta_id}")
-def obtener_factura(venta_id: int, usuario_id: int = Depends(verificar_token)):
+@router.get("/descarga/{token}", dependencies=[Depends(limitar(60, 300, "descarga-factura"))])
+def descargar_por_token(token: str):
+    """Descarga pública de una factura compartida. No requiere sesión.
+
+    El token es aleatorio, caduca y no se guarda en claro: quien lo tiene puede
+    descargar la factura, y solo esa.
+    """
+    if not token or len(token) < 20 or len(token) > 128:
+        raise HTTPException(status_code=404, detail="Enlace no válido")
+
+    with get_db() as session:
+        enlace = session.query(EnlaceFactura).filter(
+            EnlaceFactura.token_hash == _hash_token(token)
+        ).first()
+
+        if not enlace:
+            raise HTTPException(status_code=404, detail="Enlace no válido")
+
+        expira = enlace.expira
+        if expira is not None:
+            if expira.tzinfo is None:
+                expira = expira.replace(tzinfo=timezone.utc)
+            if expira < datetime.now(timezone.utc):
+                raise HTTPException(status_code=404, detail="El enlace ha caducado")
+
+        path, _venta = _generar_archivo(session, enlace.venta_id, enlace.usuario_id)
+        venta_id = enlace.venta_id
+        enlace.usos = (enlace.usos or 0) + 1
+
+    with open(path, "rb") as archivo:
+        contenido = archivo.read()
+
+    return Response(
+        content=contenido,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="factura_{venta_id}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/{venta_id}/enlace", dependencies=_VENTAS)
+def enlace_factura(venta_id: int, usuario_id: int = Depends(verificar_token)):
+    """Crea un enlace de descarga y el texto listo para WhatsApp."""
     with get_db() as session:
         config = get_config_negocio(session, usuario_id)
+        venta, _items = _datos_venta(session, venta_id, usuario_id)
+        enlace = _crear_enlace(session, usuario_id, venta_id)
 
-        venta = session.execute(
-            text("""
-                SELECT v.id, v.total, v.fecha_hora, v.estado,
-                       c.nombre AS cliente_nombre
-                FROM ventas v
-                LEFT JOIN clientes c ON v.cliente_id = c.id
-                WHERE v.id = :vid AND v.usuario_id = :uid
-            """),
-            {"vid": venta_id, "uid": usuario_id},
-        ).mappings().first()
+    telefono = _normalizar_telefono(venta.get("cliente_telefono"))
+    mensaje = (
+        f"Hola {venta.get('cliente_nombre') or ''}, aquí está tu factura #{venta_id} "
+        f"de {config['nombre_negocio']}: {enlace['url']}"
+    ).replace("  ", " ").strip()
 
-        if not venta:
-            raise HTTPException(status_code=404, detail="Venta no encontrada")
+    whatsapp_url = f"https://wa.me/{telefono}?text={urlquote(mensaje)}" if telefono else None
+    return {
+        "url": enlace["url"],
+        "expira": enlace["expira"],
+        "telefono": telefono,
+        "mensaje": mensaje,
+        "whatsapp_url": whatsapp_url,
+    }
 
-        items = session.execute(
-            text("""
-                SELECT p.nombre, vi.cantidad, vi.precio_unitario
-                FROM venta_items vi
-                JOIN productos p ON vi.producto_id = p.id
-                JOIN ventas v ON vi.venta_id = v.id
-                WHERE vi.venta_id = :vid AND v.usuario_id = :uid
-            """),
-            {"vid": venta_id, "uid": usuario_id},
-        ).mappings().fetchall()
 
-        venta_dict = dict(venta)
-        items_list = [dict(i) for i in items]
+@router.post("/{venta_id}/enviar", dependencies=_VENTAS)
+def enviar_factura_venta(
+    venta_id: int,
+    datos: EnvioFactura,
+    usuario_id: int = Depends(verificar_token),
+):
+    with get_db() as session:
+        path, venta = _generar_archivo(session, venta_id, usuario_id)
+        config = get_config_negocio(session, usuario_id)
 
-    path = generar_pdf(
-        venta_id, venta_dict, items_list, config["nombre_negocio"],
-        config["color_acento"], config["logo_path"], config["tasa_cambio"],
-        config["zona_horaria"], venta_dict.get("estado", "completada"),
-    )
+        if datos.canal == "email":
+            destinatario = sanear_texto(datos.destinatario, 254) or venta.get("cliente_email")
+            if not destinatario:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El cliente no tiene correo; escribe uno para enviarla",
+                )
+            if not smtp_configurado():
+                raise HTTPException(
+                    status_code=503, detail="El envío de correo no está configurado"
+                )
+
+            with open(path, "rb") as archivo:
+                pdf = archivo.read()
+
+            enlace = _crear_enlace(session, usuario_id, venta_id)
+            enviado = enviar_factura(
+                destinatario, pdf, config["nombre_negocio"], venta_id, enlace["url"]
+            )
+            if not enviado:
+                raise HTTPException(
+                    status_code=502, detail="No se pudo enviar el correo, intenta de nuevo"
+                )
+
+            registrar_evento(
+                session, usuario_id, "factura_enviada", "venta", venta_id,
+                f"canal=email destino={destinatario[:64]}",
+            )
+            return {"mensaje": "Factura enviada por correo", "destinatario": destinatario}
+
+        # WhatsApp: no hay API de Meta; se devuelve el enlace wa.me listo.
+        enlace = _crear_enlace(session, usuario_id, venta_id)
+        telefono = _normalizar_telefono(datos.destinatario or venta.get("cliente_telefono"))
+        mensaje = (
+            f"Hola {venta.get('cliente_nombre') or ''}, aquí está tu factura #{venta_id} "
+            f"de {config['nombre_negocio']}: {enlace['url']}"
+        ).replace("  ", " ").strip()
+
+        registrar_evento(
+            session, usuario_id, "factura_enviada", "venta", venta_id,
+            f"canal=whatsapp destino={telefono or 'sin teléfono'}",
+        )
+        return {
+            "mensaje": "Enlace de WhatsApp generado",
+            "url": enlace["url"],
+            "telefono": telefono or None,
+            "mensaje_texto": mensaje,
+            "whatsapp_url": (
+                f"https://wa.me/{telefono}?text={urlquote(mensaje)}" if telefono else None
+            ),
+        }
+
+
+@router.get("/{venta_id}", dependencies=_VENTAS)
+def obtener_factura(venta_id: int, usuario_id: int = Depends(verificar_token)):
+    with get_db() as session:
+        path, _venta = _generar_archivo(session, venta_id, usuario_id)
     return FileResponse(path, media_type="application/pdf")

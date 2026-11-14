@@ -9,7 +9,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '^/(productos|clientes|ventas|reportes|auth|facturas|organizacion|promociones|img)(/.*)?$': {
+      '^/(productos|clientes|ventas|reportes|auth|facturas|organizacion|promociones|vendedores|proveedores|gastos|compras|empleados|contabilidad|img)(/.*)?$': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },

@@ -9,9 +9,12 @@ from Backend.db.database import get_db
 from Backend.db.models import Cliente, Venta
 from Backend.dinero import a_float, dinero
 from Backend.models.schema import Abono, ClienteCrear
-from Backend.routers.auth import verificar_token
+from Backend.routers.auth import requiere_admin, requiere_modulo, verificar_token
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
+
+# Leer clientes lo necesita el POS (ventas) y contabilidad (cartera).
+_LECTURA = [Depends(requiere_modulo("ventas", "contabilidad"))]
 
 ALFANUM = string.ascii_uppercase + string.digits
 
@@ -32,6 +35,7 @@ def serializar(c, ultima=None) -> dict:
         "codigo": c.codigo,
         "nombre": c.nombre,
         "telefono": c.telefono,
+        "email": c.email,
         "credito_limite": a_float(limite),
         "credito_usado": a_float(usado),
         "credito_disponible": a_float(limite - usado),
@@ -49,7 +53,7 @@ def _serializar_un_cliente(session, c, usuario_id) -> dict:
     return serializar(c, ultima)
 
 
-@router.get("/")
+@router.get("/", dependencies=_LECTURA)
 def listar_clientes(
     usuario_id: int = Depends(verificar_token),
     q: str = Query(default=None, max_length=80),
@@ -79,7 +83,7 @@ def listar_clientes(
         return [serializar(cliente, ultima) for cliente, ultima in filas]
 
 
-@router.post("/")
+@router.post("/", dependencies=[Depends(requiere_admin)])
 def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         c = Cliente(
@@ -87,6 +91,7 @@ def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_tok
             usuario_id=usuario_id,
             nombre=cliente.nombre,
             telefono=cliente.telefono,
+            email=cliente.email,
             credito_limite=dinero(cliente.credito_limite),
         )
         session.add(c)
@@ -95,7 +100,7 @@ def crear_cliente(cliente: ClienteCrear, usuario_id: int = Depends(verificar_tok
         return serializar(c)
 
 
-@router.get("/{id}")
+@router.get("/{id}", dependencies=_LECTURA)
 def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         c = session.query(Cliente).filter(
@@ -107,7 +112,7 @@ def obtener_cliente(id: int, usuario_id: int = Depends(verificar_token)):
         return _serializar_un_cliente(session, c, usuario_id)
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(requiere_admin)])
 def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         existe = session.query(Cliente).filter(
@@ -120,6 +125,7 @@ def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(ver
         valores = {
             "nombre": cliente.nombre,
             "telefono": cliente.telefono,
+            "email": cliente.email,
             "credito_limite": dinero(cliente.credito_limite),
         }
         if cliente.credito_usado is not None:
@@ -143,7 +149,7 @@ def editar_cliente(id: int, cliente: ClienteCrear, usuario_id: int = Depends(ver
         return _serializar_un_cliente(session, c, usuario_id)
 
 
-@router.post("/{id}/abono")
+@router.post("/{id}/abono", dependencies=[Depends(requiere_admin)])
 def registrar_abono(id: int, abono: Abono, usuario_id: int = Depends(verificar_token)):
     """Registra un pago parcial del crédito y deja constancia en auditoría."""
     with get_db() as session:
@@ -183,7 +189,7 @@ def registrar_abono(id: int, abono: Abono, usuario_id: int = Depends(verificar_t
         }
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(requiere_admin)])
 def eliminar_cliente(id: int, usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
         c = session.query(Cliente).filter(
@@ -210,7 +216,7 @@ def eliminar_cliente(id: int, usuario_id: int = Depends(verificar_token)):
         return {"mensaje": "Cliente eliminado"}
 
 
-@router.get("/{id}/compras")
+@router.get("/{id}/compras", dependencies=_LECTURA)
 def historial_compras(
     id: int,
     usuario_id: int = Depends(verificar_token),
