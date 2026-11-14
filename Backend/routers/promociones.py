@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
+
 from Backend.db.database import get_db
 from Backend.db.models import Promocion
 from Backend.models.schema import PromocionCrear

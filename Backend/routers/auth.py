@@ -1,6 +1,8 @@
+import hashlib
 import logging
 import os
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -10,20 +12,51 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import or_
 
+from Backend.auditoria import registrar_evento
 from Backend.db.database import get_db
 from Backend.db.models import (
-    ChatMensaje, Cliente, Movimiento, Producto, Promocion, Venta, VentaItem, Usuario,
+    ChatMensaje,
+    Cliente,
+    Evento,
+    Movimiento,
+    Producto,
+    Promocion,
+    Usuario,
+    Venta,
+    VentaItem,
 )
-from Backend.models.schema import GoogleOAuthData, TasaCambioData
+from Backend.dinero import a_float
+from Backend.dinero import tasa_cambio as tasa_decimal
+from Backend.models.schema import (
+    GoogleOAuthData,
+    RecuperarPassword,
+    ResetPassword,
+    TasaCambioData,
+)
 from Backend.security import (
-    MAX_LOGO_BYTES, MAX_PLANTILLA_BYTES, ZONA_POR_DEFECTO,
-    comparar_seguro, es_color_hex, es_zona_horaria, ip_cliente, limitar,
-    leer_subida_segura, nombre_archivo_seguro, rate_limiter, sanear_texto,
+    MAX_LOGO_BYTES,
+    MAX_PLANTILLA_BYTES,
+    ZONA_POR_DEFECTO,
+    comparar_seguro,
+    es_color_hex,
+    es_zona_horaria,
+    ip_cliente,
+    leer_subida_segura,
+    limitar,
+    nombre_archivo_seguro,
+    rate_limiter,
+    sanear_texto,
     validar_password,
 )
 from Backend.services.email_service import (
-    CODIGO_MINUTOS_VALIDO, enviar_verificacion, generar_codigo,
+    CODIGO_MINUTOS_VALIDO,
+    RESET_MINUTOS_VALIDO,
+    enlace_reset,
+    enviar_reset,
+    enviar_verificacion,
+    generar_codigo,
 )
 
 logger = logging.getLogger("app")
@@ -42,6 +75,10 @@ TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
 
 # Intentos de verificación de código antes de invalidarlo.
 MAX_INTENTOS_CODIGO = 5
+
+# Recuperación de contraseña: enlace de un solo uso y enfriamiento entre
+# solicitudes para que nadie pueda inundar el buzón de un usuario.
+RESET_COOLDOWN_SEGUNDOS = 60
 
 LOGOS_DIR = "logos"
 PLANTILLAS_DIR = "plantillas"
@@ -195,12 +232,13 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def crear_token(usuario_id: int, usuario: str) -> str:
+def crear_token(usuario_id: int, usuario: str, version: int = 0) -> str:
     ahora = datetime.now(timezone.utc)
     return jwt.encode(
         {
             "sub": str(usuario_id),
             "usuario": usuario,
+            "ver": int(version or 0),
             "iat": int(ahora.timestamp()),
             "exp": ahora + timedelta(hours=TOKEN_EXPIRE_HOURS),
         },
@@ -216,36 +254,55 @@ def verificar_token(credentials: Optional[HTTPAuthorizationCredentials] = Depend
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         usuario_id = int(payload["sub"])
+        version = int(payload.get("ver", 0))
     except (JWTError, KeyError, TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Token inválido")
 
-    emitido = payload.get("iat")
     with get_db() as session:
         u = session.query(Usuario).filter(Usuario.id == usuario_id).first()
         if not u:
             raise HTTPException(status_code=401, detail="Token inválido")
-        # Revocación: todo token emitido antes del último cambio de contraseña deja de valer.
-        if u.password_cambiada_en and emitido is not None:
-            cambiada = u.password_cambiada_en
-            if cambiada.tzinfo is None:
-                cambiada = cambiada.replace(tzinfo=timezone.utc)
-            if emitido < cambiada.timestamp() - 1:
-                raise HTTPException(status_code=401, detail="Sesión expirada, inicia sesión de nuevo")
+        # Revocación exacta: cambiar la contraseña incrementa la versión y
+        # todos los tokens emitidos con la versión anterior dejan de valer.
+        if version != (u.token_version or 0):
+            raise HTTPException(status_code=401, detail="Sesión expirada, inicia sesión de nuevo")
     return usuario_id
 
 
 def usuario_a_respuesta(u: Usuario) -> dict:
     return {
-        "token": crear_token(u.id, u.usuario),
+        "token": crear_token(u.id, u.usuario, u.token_version or 0),
         "usuario": u.usuario,
         "email": u.email,
         "email_verified": u.email_verified,
         "provider": u.provider,
         "nombre_negocio": u.nombre_negocio,
-        "tasa_cambio": u.tasa_cambio,
+        "tasa_cambio": a_float(u.tasa_cambio),
         "tasa_cambio_configurada": u.tasa_cambio_configurada,
         "zona_horaria": u.zona_horaria,
     }
+
+
+def _hash_token(token: str) -> str:
+    """Se guarda el SHA-256: una filtración de la tabla no permite usarlo."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+# Respuesta idéntica exista o no la cuenta: no se puede enumerar usuarios.
+MENSAJE_RECUPERACION = (
+    "Si el usuario o correo existe y tiene un correo configurado, "
+    "te enviamos un enlace para restablecer la contraseña."
+)
+
+
+def _enviar_reset(email: str, token: str, nombre_negocio: str) -> None:
+    if enviar_reset(email, token, nombre_negocio):
+        return
+    logger.warning("SMTP no disponible; no se pudo enviar el enlace de recuperación a %s", email)
+    # El enlace solo se registra si se pide explícitamente (entornos de
+    # desarrollo sin SMTP). En producción nunca debe acabar en el log.
+    if os.getenv("LOG_RESET_LINK", "0") == "1":
+        logger.warning("Enlace de recuperación para %s: %s", email, enlace_reset(token))
 
 
 def _emitir_codigo(u: Usuario) -> str:
@@ -280,7 +337,7 @@ def registro(datos: RegistroData):
             password=hash_password(datos.password),
             email=datos.email,
             nombre_negocio=datos.nombre_negocio,
-            tasa_cambio=datos.tasa_cambio,
+            tasa_cambio=tasa_decimal(datos.tasa_cambio),
             tasa_cambio_configurada=True,
         )
         session.add(usuario)
@@ -382,6 +439,97 @@ def login_google(datos: GoogleOAuthData):
         return usuario_a_respuesta(usuario)
 
 
+@router.post("/recuperar", dependencies=[Depends(limitar(5, 900, "recuperar"))])
+def recuperar_password(datos: RecuperarPassword, request: Request):
+    """Envía un enlace de recuperación. La respuesta nunca revela si existe."""
+    identificador = datos.identificador.strip()
+
+    # Trabajo constante aunque la cuenta no exista, para no filtrar por tiempo.
+    _hash_token(identificador)
+
+    token = None
+    email = None
+    negocio = None
+
+    with get_db() as session:
+        u = session.query(Usuario).filter(
+            or_(
+                Usuario.usuario == identificador,
+                Usuario.email == identificador.lower(),
+            )
+        ).first()
+
+        if u and u.email:
+            ahora = datetime.now(timezone.utc)
+            anterior = u.reset_solicitado_en
+            if anterior is not None:
+                if anterior.tzinfo is None:
+                    anterior = anterior.replace(tzinfo=timezone.utc)
+                if (ahora - anterior).total_seconds() < RESET_COOLDOWN_SEGUNDOS:
+                    return {"mensaje": MENSAJE_RECUPERACION}
+
+            token = secrets.token_urlsafe(32)
+            u.reset_token_hash = _hash_token(token)
+            u.reset_expira = ahora + timedelta(minutes=RESET_MINUTOS_VALIDO)
+            u.reset_solicitado_en = ahora
+            email, negocio = u.email, u.nombre_negocio
+            registrar_evento(
+                session, u.id, "recuperacion_solicitada", "usuario", u.id,
+                "enlace de restablecimiento enviado",
+            )
+
+    if token and email:
+        _enviar_reset(email, token, negocio)
+
+    return {"mensaje": MENSAJE_RECUPERACION}
+
+
+@router.post("/reset", dependencies=[Depends(limitar(5, 900, "reset-password"))])
+def reset_password(datos: ResetPassword):
+    """Cambia la contraseña con un token válido y revoca todas las sesiones."""
+    with get_db() as session:
+        u = session.query(Usuario).filter(
+            Usuario.reset_token_hash == _hash_token(datos.token)
+        ).first()
+
+        if not u:
+            raise HTTPException(
+                status_code=400,
+                detail="El enlace es inválido o ya fue utilizado",
+            )
+
+        expira = u.reset_expira
+        if expira is not None and expira.tzinfo is None:
+            expira = expira.replace(tzinfo=timezone.utc)
+
+        if expira is None or expira < datetime.now(timezone.utc):
+            # Se invalida al caducar para que no quede reutilizable. Hay que
+            # confirmar antes de lanzar: get_db hace rollback en la excepción.
+            u.reset_token_hash = None
+            u.reset_expira = None
+            session.commit()
+            raise HTTPException(
+                status_code=400,
+                detail="El enlace expiró, solicita uno nuevo",
+            )
+
+        u.password = hash_password(datos.password_nuevo)
+        u.password_cambiada_en = datetime.now(timezone.utc)
+        u.token_version = (u.token_version or 0) + 1
+        u.reset_token_hash = None
+        u.reset_expira = None
+        u.reset_solicitado_en = None
+
+        registrar_evento(
+            session, u.id, "password_restablecida", "usuario", u.id,
+            "recuperación por correo",
+        )
+
+    return {
+        "mensaje": "Contraseña actualizada. Inicia sesión con la nueva contraseña."
+    }
+
+
 @router.get("/perfil")
 def obtener_perfil(usuario_id: int = Depends(verificar_token)):
     with get_db() as session:
@@ -414,7 +562,7 @@ def actualizar_perfil(datos: PerfilData, usuario_id: int = Depends(verificar_tok
         updates = {
             Usuario.nombre_negocio: datos.nombre_negocio,
             Usuario.color_acento: datos.color_acento,
-            Usuario.tasa_cambio: datos.tasa_cambio,
+            Usuario.tasa_cambio: tasa_decimal(datos.tasa_cambio),
             Usuario.tasa_cambio_configurada: True,
             Usuario.zona_horaria: datos.zona_horaria,
         }
@@ -463,6 +611,7 @@ def cambiar_password(datos: CambioPasswordData, usuario_id: int = Depends(verifi
         u.password = hash_password(datos.password_nuevo)
         # Invalida todos los tokens emitidos antes de este momento.
         u.password_cambiada_en = datetime.now(timezone.utc)
+        u.token_version = (u.token_version or 0) + 1
         return {"mensaje": "Contraseña actualizada correctamente"}
 
 
@@ -500,11 +649,13 @@ def verificar_codigo(datos: VerificarCodigoData, usuario_id: int = Depends(verif
                 expira = expira.replace(tzinfo=timezone.utc)
             if expira < datetime.now(timezone.utc):
                 u.verificacion_token = None
+                session.commit()
                 raise HTTPException(status_code=400, detail="El código ha expirado, solicita uno nuevo")
 
         if (u.verificacion_intentos or 0) >= MAX_INTENTOS_CODIGO:
             u.verificacion_token = None
             u.verificacion_intentos = 0
+            session.commit()
             raise HTTPException(
                 status_code=400,
                 detail="Demasiados intentos fallidos, solicita un código nuevo",
@@ -537,6 +688,7 @@ def eliminar_cuenta(datos: EliminarCuentaData, usuario_id: int = Depends(verific
         archivos = [ruta for ruta in (u.logo_path, u.plantilla_pdf_path) if ruta]
 
         session.query(ChatMensaje).filter(ChatMensaje.usuario_id == usuario_id).delete()
+        session.query(Evento).filter(Evento.usuario_id == usuario_id).delete()
         session.query(VentaItem).filter(
             VentaItem.venta_id.in_(
                 session.query(Venta.id).filter(Venta.usuario_id == usuario_id)
@@ -618,6 +770,9 @@ def actualizar_tasa_cambio(data: TasaCambioData, usuario_id: int = Depends(verif
         raise HTTPException(status_code=400, detail="La tasa debe ser mayor a cero")
     with get_db() as session:
         session.query(Usuario).filter(Usuario.id == usuario_id).update({
-            Usuario.tasa_cambio: data.tasa_cambio
+            Usuario.tasa_cambio: tasa_decimal(data.tasa_cambio)
         })
-        return {"mensaje": "Tasa de cambio actualizada", "tasa_cambio": data.tasa_cambio}
+        return {
+            "mensaje": "Tasa de cambio actualizada",
+            "tasa_cambio": a_float(data.tasa_cambio),
+        }

@@ -1,12 +1,39 @@
 # Bravo's Gest
 
-Sistema de gestión para negocios locales: inventario, ventas, facturación, clientes, promociones y análisis con IA.
+Sistema de gestión para negocios locales: inventario, ventas, facturación, clientes, crédito, promociones, cierre de caja y análisis con IA.
+
+La prioridad de la versión 1.2 es que **los números cuadren**: importes exactos, ventas que se anulan sin borrarse y stock que no se puede sobrevender.
 
 ## Stack
 
 - **Backend**: Python 3.11+ · FastAPI · PostgreSQL · SQLAlchemy
 - **Frontend**: React 19 + Vite 8 + Tailwind CSS 3 + react-router-dom v7 + lucide-react
-- **IA**: **Gesti** — asistente con Groq (Llama 3.3 70B), OpenAI u Ollama. Análisis de ventas, chat conversacional con historial persistente y reportes predictivos.
+- **IA**: **Gesti** — asistente con Groq (Llama 3.3 70B), OpenAI u Ollama
+- **Pruebas**: pytest contra PostgreSQL real (84 pruebas)
+
+---
+
+## Lo que cambió en 1.2
+
+| Área | Antes | Ahora |
+| --- | --- | --- |
+| Dinero | `FLOAT` en toda la base | `NUMERIC(12,2)` + `Decimal` con redondeo comercial |
+| Anular venta | `DELETE` de la venta y sus líneas | Estado `anulada`, motivo, autor y fecha; stock y crédito revertidos |
+| Stock | Validar y luego restar | Bloqueo de fila + `UPDATE` condicional + `CHECK (stock >= 0)` |
+| Sesiones | Revocación por marca de tiempo (±1 s) | `token_version` en el JWT: revocación exacta |
+| Día del negocio | Resta fija de 6 horas (UTC-6) | `zoneinfo` con la zona configurada (soporta horario de verano) |
+| Dashboard | Varias consultas por petición | Una sola pasada con agregados `FILTER` |
+| Listado de clientes | Una consulta por cliente (N+1) | Una sola agregación |
+| Índices | Ninguno | Índices compuestos por `usuario_id` y fecha |
+| Borrados | Ventas y clientes desaparecían | Se bloquea borrar historial; solo se anula |
+| Auditoría | No existía | Tabla `eventos` + página **Actividad** |
+| Caja | No existía | **Cierre de caja** por método de pago |
+| Contabilidad | Sin exportación | **CSV** de ventas por rango de fechas |
+| POS | Solo selección manual | **Escáner de código de barras** |
+| Crédito | Un `float` editable a mano | **Abonos** con validación de saldo y auditoría |
+| Contraseña | Sin recuperación ("pide al administrador") | **Enlace por correo** de un solo uso, 30 min, revoca sesiones |
+| Costos | No existían | **Costo por producto** y **margen real** con el costo congelado al vender |
+| Cobro | Un reintento podía duplicar la venta | **Idempotency-Key** en el POS |
 
 ---
 
@@ -61,20 +88,114 @@ npm run dev
 - Frontend (dev): http://127.0.0.1:5173
 - Docs API: http://127.0.0.1:8000/docs
 
-> El frontend en dev se sirve en `:5173` con hot reload y redirige las llamadas API al backend mediante el proxy de Vite.
->
-> Para producción, ejecutar `npm run build` en `Frontend/` para generar los estáticos que sirve FastAPI.
+> Para producción, ejecutar `npm run build` en `Frontend/` y FastAPI sirve los estáticos.
 
 ---
 
-## Credenciales iniciales
+## Pruebas
 
-**Ya no hay contraseña por defecto.** En el primer arranque, el usuario `root` se crea así:
+Las pruebas corren contra **PostgreSQL real** (no SQLite): las consultas usan `AT TIME ZONE`, `STRING_AGG` y `FILTER`, que SQLite no implementa igual.
 
-1. Si definiste `ROOT_PASSWORD` en `.env`, se usa esa.
-2. Si no, se genera una contraseña aleatoria y **se muestra una única vez en el log del servidor**.
+```bash
+pip install -r requirements-dev.txt
 
-Si el sistema detecta que `root` sigue con la contraseña antigua `1234`, lo avisa por log para que la cambies.
+# Una sola vez: crear la base de pruebas
+psql -U postgres -c "CREATE DATABASE nicagest_test;"
+
+pytest                                  # 84 pruebas
+pytest tests/test_ventas.py -v          # solo ventas
+ruff check Backend main.py tests --select E,F,W,I --ignore E501
+```
+
+La URL se toma de `TEST_DATABASE_URL` (si no, `postgresql://postgres:1234@localhost:5432/nicagest_test`). Cada prueba limpia las tablas con `TRUNCATE ... RESTART IDENTITY CASCADE`.
+
+### Qué cubren
+
+- **Dinero** (`test_dinero.py`): redondeo half-up, `0.1 + 0.2`, entradas inválidas, tasas de 4 decimales, rangos de día por zona horaria y día de 23 h por cambio de horario.
+- **Ventas** (`test_ventas.py`): descuento de stock, sobreventa, líneas repetidas fusionadas, precio del cliente ignorado, promociones, crédito, anulación reversible, doble anulación, **dos cajas vendiendo la última unidad a la vez** y métodos de pago.
+- **Seguridad** (`test_seguridad.py`): login, política de contraseñas, revocación de tokens, aislamiento entre cuentas, promociones ajenas, `Cache-Control`, límite de cuerpo.
+- **Clientes e inventario** (`test_clientes.py`): códigos únicos, última compra, abonos, bloqueo de borrado con historial, stock mínimo, búsqueda, código de barras y cierre de caja.
+- **Reportes** (`test_reportes.py`): dashboard sin anuladas, auditoría, CSV, paginación y aislamiento.
+- **Recuperación** (`test_recuperacion.py`): respuesta que no enumera cuentas, token hasheado, un solo uso, caducidad, revocación de sesiones y auditoría.
+- **Margen** (`test_margen.py`): costo congelado al vender, reparto de descuentos, reporte por producto y CSV.
+- **Idempotencia** (`test_idempotencia.py`): reintento con la misma clave, claves por usuario, clave inválida y **dos cobros simultáneos**.
+
+CI (`.github/workflows/ci.yml`) ejecuta lint + pruebas con un servicio PostgreSQL y compila el frontend en cada push.
+
+---
+
+## Dinero: precisión exacta
+
+- Todas las columnas monetarias son `NUMERIC(12,2)` (`total`, `precio`, `precio_dolar`, `credito_limite`, `credito_usado`, `precio_unitario`, `valor`).
+- En Python se calcula con `Decimal` y `ROUND_HALF_UP` (`Backend/dinero.py`). El precio de la tasa de cambio usa 4 decimales.
+- El `float` aparece **solo** al serializar la respuesta JSON (`a_float`), nunca en un cálculo.
+- Los datos antiguos en `FLOAT` se convierten una sola vez al arrancar:
+
+```sql
+ALTER TABLE ventas ALTER COLUMN total TYPE NUMERIC(12,2)
+USING ROUND(total::numeric, 2);
+```
+
+Ejemplo real de la migración: `2.675 → 2.68`, `0.30000000000000004 → 0.30`.
+
+## Anulación de ventas (sin borrar)
+
+Anular **no elimina** la venta. Se marca y se revierte:
+
+- `estado = 'anulada'`, `anulada_en`, `anulada_por`, `motivo_anulacion`.
+- Se devuelve el stock (con movimiento de entrada) y se revierte el crédito usado.
+- La venta sigue existiendo y su factura se genera con el aviso **VENTA ANULADA**.
+- Los totales del dashboard, reportes y cierre de caja excluyen las anuladas.
+- Anular dos veces devuelve `409`.
+
+La UI pide el motivo y lo guarda; queda en **Actividad**.
+
+## Concurrencia de stock
+
+Crear una venta sigue este orden:
+
+1. Se agrupan las líneas por producto y se validan contra el stock.
+2. `SELECT ... FOR UPDATE OF productos` ordenado por `id` (evita interbloqueos).
+3. Se recalcula el subtotal en el servidor con `Decimal` (se ignoran precios del cliente).
+4. `UPDATE productos SET stock = stock - :n WHERE id = :id AND stock >= :n`; si no afecta a una fila, la venta se aborta con `409`.
+5. La base tiene `CHECK (stock >= 0)` como última red.
+
+Resultado: dos cajas simultáneas sobre la última unidad → una vende, la otra recibe `409`.
+
+## Recuperación de contraseña
+
+1. El usuario pide el enlace con su usuario **o** correo (`POST /auth/recuperar`).
+2. La respuesta es idéntica exista o no la cuenta (no se pueden enumerar usuarios).
+3. Se genera un token con `secrets.token_urlsafe(32)`; en la base solo se guarda su **SHA-256**.
+4. Caduca a los **30 minutos**, es de **un solo uso** y hay un enfriamiento de 60 s entre solicitudes.
+5. `POST /auth/reset` cambia la contraseña, incrementa `token_version` y **revoca todas las sesiones**.
+6. Queda registrado en la auditoría (`recuperacion_solicitada`, `password_restablecida`).
+
+Sin SMTP configurado el flujo no envía nada; para desarrollo se puede poner
+`LOG_RESET_LINK=1` y el enlace aparece en el log (nunca en la respuesta HTTP).
+
+## Costo, margen y rentabilidad
+
+- Cada producto tiene `costo` (`NUMERIC(12,2)`).
+- Al vender se guarda `costo_unitario` en la línea: **el costo queda congelado**. Cambiar el costo del producto después no reescribe el margen histórico.
+- El dashboard y el cierre de caja muestran **ganancia** y **margen %** del día.
+- `GET /reportes/margenes?desde&hasta` devuelve ingresos, costo, ganancia y margen por producto. El descuento de la venta se reparte entre sus líneas en proporción al importe bruto.
+- El CSV exportado incluye `Costo C$` y `Ganancia C$` por factura.
+
+## Idempotencia del cobro
+
+El POS envía una cabecera `Idempotency-Key` por intento de cobro:
+
+- Si la venta ya existe con esa clave, devuelve la original con `repetida: true` y **no descuenta stock otra vez**.
+- La clave es única por usuario (`UNIQUE (usuario_id, idempotency_key) WHERE idempotency_key IS NOT NULL`).
+- Dos peticiones simultáneas con la misma clave: una crea la venta y la otra recibe la misma, sin duplicar.
+- Si la venta original fue anulada, el reintento devuelve `409`.
+
+## Crédito y abonos
+
+- Límite y saldo por cliente, ambos `NUMERIC`.
+- `POST /clientes/{id}/abono` descuenta saldo, rechaza montos mayores al pendiente y deja evento de auditoría.
+- Editar el saldo a mano sigue disponible para correcciones, pero también queda auditado.
 
 ---
 
@@ -84,85 +205,114 @@ Si el sistema detecta que `root` sigue con la contraseña antigua `1234`, lo avi
 
 | Medida | Detalle |
 | --- | --- |
-| Hash de contraseñas | bcrypt (coste por defecto) |
-| Política de contraseñas | Mínimo 8 caracteres, letras **y** números; se rechazan las más comunes; máximo 72 bytes (límite real de bcrypt) |
-| Token | JWT HS256 con `iat` y `exp`; 12 h por defecto (`TOKEN_EXPIRE_HOURS`) |
-| Revocación | Cambiar la contraseña invalida **todos** los tokens emitidos antes (`password_cambiada_en`) |
-| Validación de token | Se comprueba contra la base de datos en cada petición: una cuenta borrada deja de ser válida al instante |
-| Enumeración de usuarios | El login compara contra un hash ficticio cuando el usuario no existe, para igualar el tiempo de respuesta |
-| Fuerza bruta | Rate limiting por IP (ver tabla abajo) |
-| Login con Google | Se validan `aud`, `iss` y `email_verified`, y falla cerrado si `GOOGLE_CLIENT_ID` no está configurado |
-
-> Al cambiar la contraseña se cierran todas las sesiones, incluida la actual: la app te pide iniciar sesión de nuevo.
-
-### Código de verificación por correo
-
-- Generado con `secrets` (no con `random`).
-- Caduca a los 15 minutos.
-- Máximo 5 intentos; al agotarlos se invalida.
-- Comparación en tiempo constante.
-- **Nunca se devuelve al cliente.** Si SMTP no está configurado, el código solo aparece en el log del servidor.
+| Hash de contraseñas | bcrypt |
+| Política | Mínimo 8 caracteres, letras y números; lista negra; máximo 72 bytes |
+| Token | JWT HS256 con `sub`, `ver`, `iat`, `exp` |
+| Revocación | `token_version`: cambiar la contraseña incrementa la versión e invalida **todos** los tokens anteriores, sin heurísticas de tiempo |
+| Validación | El token se comprueba contra la base en cada petición; una cuenta borrada deja de valer al instante |
+| Enumeración | El login compara contra un hash ficticio cuando el usuario no existe |
+| Fuerza bruta | Rate limiting por IP |
+| Login con Google | Valida `aud`, `iss` y `email_verified`; falla cerrado sin `GOOGLE_CLIENT_ID` |
 
 ### Aislamiento entre cuentas
 
-Cada usuario solo ve y modifica sus propios datos. Todas las consultas de productos, clientes, ventas, promociones y facturas filtran por `usuario_id`, incluidas las que antes no lo hacían (movimientos de inventario, últimas compras, actualizaciones por id).
+Todas las consultas filtran por `usuario_id`: productos, clientes, ventas, movimientos, promociones, facturas, reportes y auditoría. Las promociones y clientes referenciados se validan contra el dueño.
 
-Las promociones y los clientes referenciados se validan contra el dueño antes de asignarlos.
+### Endurecimiento del servidor
 
-### Precios e importes
-
-**El precio de venta lo fija siempre el servidor** a partir del producto en base de datos. Lo que envíe el cliente en `precio_unitario` se ignora. Esto cierra la manipulación de importes desde el navegador.
-
-Anular una venta devuelve el stock, registra la entrada de inventario y revierte el crédito usado si la venta fue a crédito.
+- **Límite de cuerpo**: `MAX_BODY_BYTES` (12 MB por defecto) → `413` antes de leer el JSON.
+- **Cabeceras**: CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies` y HSTS opcional.
+- **Sin caché**: `Cache-Control: no-store` en todas las rutas de API.
+- **Compresión**: GZip para respuestas grandes.
+- **Hosts**: `ALLOWED_HOSTS` activa `TrustedHostMiddleware`.
+- **Path traversal**: el fallback de la SPA comprueba que la ruta resuelta quede dentro de `Frontend/dist`.
+- **CORS**: orígenes explícitos, `*` ignorado.
+- **Errores**: los 500 son genéricos; los 422 traducen el error de validación.
+- El contenedor Docker corre sin privilegios y con `HEALTHCHECK`.
 
 ### Subidas de archivos
 
-Se valida la **firma de bytes real** del archivo, no el `Content-Type` (que lo controla el cliente), además del tamaño:
-
-| Archivo | Tipos | Límite |
-| --- | --- | --- |
-| Logo del negocio | PNG, JPG | 2 MB |
-| Plantilla de factura | PDF | 10 MB |
-
-Los nombres en disco se derivan del id de usuario, sin usar entrada del cliente.
-
-### Servidor
-
-- **Cabeceras**: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` y `Strict-Transport-Security` (con `ENABLE_HSTS=1`).
-- **Path traversal**: el fallback de la SPA comprueba que la ruta resuelta quede dentro de `Frontend/dist`.
-- **CORS**: orígenes explícitos; el comodín `*` se ignora. Los tokens van en la cabecera `Authorization`, así que `allow_credentials` está desactivado.
-- **Errores**: las respuestas 500 son genéricas y no filtran trazas ni detalles de base de datos; las 422 traducen el error de validación a un mensaje legible.
-- **Rutas de API inexistentes** devuelven 404 en JSON en lugar del `index.html`.
-- **X-Request-ID** en cada respuesta para correlacionar logs.
-- El contenedor Docker corre como usuario sin privilegios y con `HEALTHCHECK`.
-
-### Validación de entrada
-
-Todas las longitudes, rangos y formatos se validan con Pydantic antes de tocar la base de datos: color de acento hexadecimal, zona horaria existente en `zoneinfo`, tasa de cambio positiva, teléfonos, códigos de verificación numéricos y `metodo_pago` restringido a valores conocidos.
-
-El texto que acaba en los PDF se sanea y escapa para que no inyecte marcado en reportlab.
+Se valida la firma de bytes real, no el `Content-Type`: logo PNG/JPG hasta 2 MB, plantilla PDF hasta 10 MB. El nombre en disco se deriva del id de usuario.
 
 ### Rate limiting
 
-Ventana deslizante en memoria, por IP:
+Ventana deslizante en memoria por IP: login 10/min, registro 5/h, OAuth 10/min, contraseña 5/15 min, código 5/15 min, chat IA 20/5 min, descargas 30/5 min, exportación 10/5 min, subidas 10/5 min, perfil 30/min.
 
-| Ámbito | Límite |
-| --- | --- |
-| Login | 10 / minuto |
-| Registro | 5 / hora |
-| OAuth Google | 10 / minuto |
-| Cambio de contraseña | 5 / 15 min |
-| Envío de código | 5 / 15 min |
-| Verificación de código | 10 / 15 min |
-| Eliminación de cuenta | 3 / hora |
-| Chat con IA | 20 / 5 min |
-| Descarga de facturas | 30 / 5 min |
-| Subidas | 10 / 5 min |
-| Perfil y tasa de cambio | 30 / minuto |
+> Vive en memoria: con varios workers cada uno lleva su cuenta. Para multi-instancia hay que moverlo a Redis manteniendo la interfaz de `Backend/security.py`.
 
-> El limitador vive en memoria: con varios workers de uvicorn cada uno lleva su propia cuenta. Para despliegues multi-instancia hay que moverlo a Redis manteniendo la interfaz de `Backend/security.py`.
->
-> Si la app está detrás de un proxy inverso, define `TRUST_PROXY_HEADERS=1` **solo** si ese proxy sobrescribe `X-Forwarded-For`. Si no, cualquiera podría falsear su IP y saltarse los límites.
+---
+
+## Interfaz
+
+- **Navegación agrupada** por Principal, Operación, Análisis y Documentos, con indicador de sección activa.
+- **Barra inferior en móvil** con los cuatro accesos de uso diario y "Más" para el resto (zona del pulgar).
+- **Gráfico de tendencia** de 7 días con ventas y ganancia, en SVG puro (sin dependencias).
+- **Cabeceras de tabla fijas**, filtros segmentados y **steppers de cantidad** en el carrito del POS.
+- **Atajos**: `F2` abre Nueva venta y `Cmd/Ctrl + Enter` cobra.
+- **Ergonomía táctil**: objetivos de 44 px y campos de 16 px en pantallas táctiles (evita el zoom automático de iOS).
+- **Estados completos**: skeletons con shimmer, vacío, error, carga y deshabilitado; se respeta `prefers-reduced-motion`.
+- Entrar directo o refrescar `/ventas`, `/clientes`, `/promociones` u `/organizacion` sirve la SPA (antes devolvía 404).
+
+## Funcionalidades
+
+### Punto de venta
+
+- Carrito con cliente, método de pago y **escáner de código de barras** (Enter agrega el producto).
+- Búsqueda por código exacto (`GET /productos/codigo/{codigo}`) o por nombre.
+- Promociones automáticas (porcentaje, monto fijo, 2x1) calculadas en el servidor.
+- Validación de stock y de crédito antes de confirmar.
+- Anulación con motivo, visible en el historial.
+
+### Cierre de caja
+
+`GET /ventas/cierre?fecha=YYYY-MM-DD` devuelve:
+
+- Total vendido, cantidad de operaciones y ticket promedio.
+- Desglose por método de pago y **efectivo esperado**.
+- Anuladas del día (cantidad e importe).
+- Primera y última venta.
+
+Desde Ventas se abre en un modal y se puede exportar el CSV del día.
+
+### Exportación CSV
+
+`GET /reportes/exportar?desde=...&hasta=...` — separador `;`, BOM UTF-8 para Excel, importes con dos decimales y estado de cada venta. Máximo 50 000 filas y 10 descargas cada 5 minutos.
+
+### Auditoría
+
+Tabla `eventos` con `usuario_id`, tipo, entidad, id y detalle, escrita en la misma transacción que la operación. Eventos: venta creada/anulada, producto creado/editado/eliminado, recarga de inventario, cliente creado/editado/eliminado y abono de crédito.
+
+`GET /reportes/eventos` alimenta la página **Actividad**, con filtro por tipo y búsqueda libre.
+
+### Inventario
+
+- Producto con categoría, **código de barras único por negocio**, stock, stock mínimo y precio.
+- Recarga, movimientos de entrada/salida y alertas de stock bajo usando el mínimo de cada producto.
+- No se puede eliminar un producto con ventas registradas (`409`): las facturas históricas conservan sus líneas.
+
+### Clientes
+
+- Código único de 6 caracteres, inmutable.
+- Crédito con límite, saldo y disponible; abonos auditados.
+- Historial de compras.
+- No se puede eliminar un cliente con ventas (`409`).
+
+### Facturas PDF
+
+- Doble moneda (C$/US$), formato de miles y zona horaria del negocio.
+- Logo, color de acento y organización por año/semestre/trimestre/mes/semana/día.
+- Descarga individual o ZIP por periodo (tope de 3 000 facturas por ZIP).
+- Las anuladas se generan con el aviso **VENTA ANULADA**.
+
+### Dashboard
+
+- Ventas del día, ticket promedio, variación frente a ayer y anuladas.
+- Productos, clientes y stock bajo en una sola consulta.
+- Últimas ventas, métodos de pago, promociones activas y resumen anual.
+
+### Gesti IA
+
+Chat con historial persistente, análisis del día y proyecciones. El contexto va acotado (300 ventas, 100 movimientos) y los datos del negocio se envían como datos, no como instrucciones.
 
 ---
 
@@ -170,110 +320,40 @@ Ventana deslizante en memoria, por IP:
 
 | Variable | Por defecto | Descripción |
 | --- | --- | --- |
-| `DATABASE_URL` | — | Cadena de conexión a PostgreSQL |
-| `SECRET_KEY` | — | **Obligatoria.** Firma de los JWT. 32+ caracteres |
-| `TOKEN_EXPIRE_HOURS` | `12` | Horas de validez del token |
-| `ROOT_PASSWORD` | aleatoria | Contraseña inicial del usuario `root` |
-| `CORS_ORIGINS` | `localhost:5173,localhost:8000` | Orígenes permitidos, separados por coma |
+| `DATABASE_URL` | — | Conexión a PostgreSQL |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` / `DB_POOL_TIMEOUT` / `DB_POOL_RECYCLE` | `10` / `20` / `30` / `1800` | Pool de conexiones |
+| `SECRET_KEY` | — | **Obligatoria**, 32+ caracteres |
+| `TOKEN_EXPIRE_HOURS` | `12` | Validez del JWT |
+| `ROOT_PASSWORD` | aleatoria | Contraseña inicial de `root` |
+| `CORS_ORIGINS` | `localhost:5173,localhost:8000` | Orígenes permitidos |
+| `ALLOWED_HOSTS` | vacío | Hosts aceptados (`TrustedHostMiddleware`) |
+| `MAX_BODY_BYTES` | `12582912` | Tamaño máximo del cuerpo |
 | `TRUST_PROXY_HEADERS` | `0` | Confiar en `X-Forwarded-For` |
-| `ENABLE_HSTS` | `0` | Activar `Strict-Transport-Security` (solo con HTTPS) |
-| `EXPOSER_DOCS` | `1` | Poner `0` para desactivar `/docs` en producción |
+| `ENABLE_HSTS` | `0` | Activar HSTS (solo con HTTPS) |
+| `EXPOSER_DOCS` | `1` | `0` desactiva `/docs` |
 | `CONTENT_SECURITY_POLICY` | política por defecto | Solo si añades recursos externos |
-| `NOMBRE_NEGOCIO` | `Mi Negocio` | Nombre por defecto en las facturas |
-| `FRONTEND_URL` | `http://localhost:5173` | Enlaces en los correos |
-| `GOOGLE_CLIENT_ID` | — | Client ID de Google OAuth |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | — | Envío de códigos de verificación |
-
-### Configurar la IA (Gesti)
-
-Crea una cuenta gratuita en [console.groq.com](https://console.groq.com) y agrega en `.env`:
-
-```env
-NICAGEST_IA_MODO=groq
-GROQ_API_KEY=tu_key_aqui
-```
-
-Alternativas: OpenAI (`NICAGEST_IA_MODO=openai`) u Ollama (`NICAGEST_IA_MODO=ollama`).
-
-> Gesti responde con tono amigable y conoce tu inventario, clientes, ventas y la tasa de cambio configurada. Las conversaciones se guardan y se recuperan al volver al Dashboard.
->
-> El contexto que se envía al modelo tiene un tope de filas (300 ventas, 100 movimientos) para acotar coste y tamaño del prompt. Los datos del negocio se mandan en un bloque separado con la instrucción explícita de tratarlos como datos y no como órdenes.
+| `NOMBRE_NEGOCIO` | `Mi Negocio` | Nombre por defecto en facturas |
+| `FRONTEND_URL` | `http://localhost:5173` | Enlaces en correos |
+| `GOOGLE_CLIENT_ID` | — | Google OAuth |
+| `SMTP_*` | — | Códigos de verificación |
+| `NICAGEST_IA_MODO` | — | `groq`, `openai` u `ollama` |
+| `TEST_DATABASE_URL` | `.../nicagest_test` | Base usada por pytest |
+| `LOG_RESET_LINK` | `0` | `1` registra el enlace de recuperación en el log (solo desarrollo) |
 
 ---
 
-## Configuración del negocio
+## Migraciones
 
-Desde el panel de configuración (engranaje en el sidebar) se puede ajustar:
+No hay Alembic. `Backend/db/database.py` aplica DDL idempotente al arrancar:
 
-| Campo | Descripción |
-| --- | --- |
-| **Nombre del negocio** | Se muestra en el sidebar y en las facturas PDF |
-| **Color de acento** | Color principal de la interfaz y las facturas. Se aplica al instante en toda la app |
-| **Tasa de cambio** | Tasa C$/USD usada en facturas, cotizaciones y precios en dólares |
-| **Zona horaria** | Zona para mostrar horas en ventas, detalle y facturas PDF. Por defecto `America/Managua` |
+1. `Base.metadata.create_all` crea lo que falte.
+2. `ADD COLUMN IF NOT EXISTS` para columnas nuevas.
+3. Conversión `FLOAT → NUMERIC` **solo si la columna aún no es numeric**.
+4. `BACKFILL` de `estado` y `SET NOT NULL`.
+5. Restricciones `CHECK` solo si no existen (consulta a `pg_constraint`).
+6. `CREATE INDEX IF NOT EXISTS` para los índices.
 
-### Color de acento
-
-El color elegido genera una escala completa en tiempo de ejecución (`src/lib/color.js`) que sobrescribe las variables CSS del tema. Afecta a botones, enlaces, badges, el sidebar y los anillos de foco.
-
-Si eliges un color claro, el texto de los botones cambia automáticamente a oscuro según la luminancia, para mantener el contraste.
-
----
-
-## Interfaz
-
-- **Tema claro / oscuro / sistema.** La preferencia se guarda en `localStorage` y se aplica antes del primer pintado (`public/theme-boot.js`) para que no haya destello al cargar.
-- **Responsive.** Sidebar fijo y colapsable en escritorio; menú lateral deslizante en móvil, con cierre por Escape y al cambiar de ruta.
-- **Accesibilidad.** Foco visible en todos los elementos interactivos, `aria-label` en los botones de icono, etiquetas asociadas a sus campos, trampa de foco y restauración al cerrar los modales, regiones `aria-live` para las notificaciones, y respeto de `prefers-reduced-motion` (que detiene las animaciones de fondo).
-- **Carga.** Esqueletos con la forma del contenido en lugar de spinners genéricos.
-- **Componentes compartidos.** `Button`, `Field`, `Input`, `Select`, `Checkbox`, `Card`, `StatCard`, `EmptyState`, `Skeleton`, `Modal` y `ConfirmDialog` en `src/components/ui/`.
-
----
-
-## Funcionalidades
-
-### Clientes con código único
-
-Cada cliente recibe un **código único de 6 caracteres alfanuméricos** (ej. `9DP7Q0`):
-
-- Se genera automáticamente y es inmutable.
-- Se muestra en la tabla y en el modal de edición.
-- Se puede buscar por código.
-
-### Zona horaria configurable
-
-Todas las horas (ventas, detalle, facturas PDF) se muestran según la zona configurada, con `Intl.DateTimeFormat` en el frontend y `zoneinfo` en el backend.
-
-### Inventario
-
-- Alta, edición y eliminación de productos con categoría, stock y stock mínimo.
-- Recarga de stock e historial de movimientos (entradas y salidas).
-- Alertas de stock bajo en el inventario y el dashboard.
-- Asignación de promociones por producto.
-
-### Ventas
-
-- Punto de venta con carrito, selección de cliente y método de pago (efectivo, tarjeta, transferencia, crédito).
-- Aplicación automática de promociones (porcentaje, monto fijo, 2x1).
-- Validación de stock antes de confirmar y de crédito disponible en ventas a crédito.
-- Anulación de ventas con devolución de stock y reversión de crédito.
-- Filtro por fecha y búsqueda por cliente o producto.
-
-### Facturas PDF
-
-- **Doble moneda**: C$ y US$ según la tasa configurada.
-- **Formato de miles** (ej. `C$ 20,500.00`).
-- Logo del negocio, color de acento y organización por semana/día.
-- Hora según la zona horaria del usuario.
-- Navegación jerárquica y descarga por año, semestre, trimestre, mes, semana o día (ZIP).
-
-### Dashboard
-
-Métricas del día, últimas ventas, productos con stock bajo, desglose por método de pago, promociones activas y comparativa de ingresos con el año anterior.
-
-### Gesti IA
-
-Chat con historial persistente, análisis del día y proyecciones (reabastecimiento, mejores días, proyección a 7 días).
+En bases nuevas `create_all` genera el esquema definitivo y los pasos 2–6 no hacen nada.
 
 ---
 
@@ -281,64 +361,70 @@ Chat con historial persistente, análisis del día y proyecciones (reabastecimie
 
 ```
 Gest/
-├── main.py                         ← Entrada FastAPI + middleware y cabeceras de seguridad
-├── requirements.txt
-├── Dockerfile                      ← Multi-etapa; runtime sin privilegios
-├── docker-compose.yml
-├── .env
+├── main.py                         ← FastAPI, límite de cuerpo, cabeceras, GZip, SPA
+├── requirements.txt / requirements-dev.txt
+├── pytest.ini
+├── Dockerfile / docker-compose.yml
 ├── Backend/
-│   ├── security.py                 ← Rate limiting, validación de subidas, saneado
+│   ├── dinero.py                   ← Decimal, redondeo half-up, tasas
+│   ├── tiempo.py                   ← Rangos de día por zona horaria (DST)
+│   ├── auditoria.py                ← Registro de eventos
+│   ├── security.py                 ← Rate limiting, subidas, saneado
 │   ├── ai/ia_service.py            ← Gesti (Groq / OpenAI / Ollama)
 │   ├── db/
 │   │   ├── database.py             ← Engine, sesión y migraciones idempotentes
-│   │   ├── models.py               ← Modelos ORM
-│   │   └── schema.sql              ← (legacy, ya no se usa)
-│   ├── models/schema.py            ← Modelos Pydantic con validación
-│   ├── services/email_service.py   ← Códigos de verificación por correo
+│   │   └── models.py               ← ORM: NUMERIC, estado, eventos, índices
+│   ├── models/schema.py            ← Pydantic con Decimal
+│   ├── services/email_service.py
 │   └── routers/
-│       ├── auth.py                 ← JWT + perfil + seguridad de cuenta
-│       ├── productos.py            ← Inventario y movimientos
-│       ├── ventas.py               ← Punto de venta + anulación
-│       ├── clientes.py             ← Clientes, crédito y código único
-│       ├── reportes.py             ← Dashboard, Gesti, predictivos, chat
+│       ├── auth.py                 ← JWT con token_version, perfil, seguridad
+│       ├── productos.py            ← Inventario, código de barras, movimientos
+│       ├── ventas.py               ← POS, anulación, resumen y cierre de caja
+│       ├── clientes.py             ← Clientes, crédito y abonos
+│       ├── reportes.py             ← Dashboard, IA, CSV, auditoría
 │       ├── facturas.py             ← PDF con reportlab
-│       ├── organizacion.py         ← Navegación jerárquica de facturas
-│       └── promociones.py          ← Promociones y descuentos
+│       ├── organizacion.py         ← Navegación jerárquica y ZIP
+│       └── promociones.py
+├── tests/
+│   ├── conftest.py
+│   ├── test_dinero.py
+│   ├── test_ventas.py
+│   ├── test_seguridad.py
+│   ├── test_clientes.py
+│   ├── test_reportes.py
+│   ├── test_recuperacion.py
+│   ├── test_margen.py
+│   └── test_idempotencia.py
+├── .github/workflows/ci.yml
 └── Frontend/
-    ├── index.html
-    ├── public/theme-boot.js        ← Tema antes del primer pintado
-    ├── tailwind.config.js
-    ├── vite.config.js               ← Proxy de API para desarrollo
     └── src/
-        ├── main.jsx
-        ├── App.jsx                 ← Rutas
-        ├── index.css               ← Tokens de diseño, componentes y utilidades
-        ├── components/
-        │   ├── Layout.jsx          ← Sidebar, header y avisos
-        │   ├── Modal.jsx           ← Diálogo accesible + ConfirmDialog
-        │   ├── SettingsModal.jsx   ← Perfil y seguridad
-        │   ├── Toast.jsx
-        │   ├── AuroraBackground.jsx
-        │   └── ui/                 ← Button, Field, Card, Feedback
-        ├── context/
-        │   ├── AuthContext.jsx     ← Sesión, revalidación y color de acento
-        │   └── ToastContext.jsx
-        ├── hooks/
-        │   ├── useTheme.js
-        │   └── useDebounce.js
-        ├── lib/
-        │   ├── api.js              ← Cliente HTTP, descargas y formato
-        │   └── color.js            ← Escala de color de acento
-        └── pages/
-            ├── LoginPage.jsx
-            ├── DashboardPage.jsx
-            ├── InventarioPage.jsx
-            ├── VentasPage.jsx
-            ├── ClientesPage.jsx
-            ├── PromocionesPage.jsx
-            ├── OrganizacionPage.jsx
-            └── GestiPage.jsx
+        ├── pages/                  ← Dashboard, Ventas, Inventario, Clientes,
+        │                              Promociones, Organización, Gesti, Actividad,
+        │                              Rentabilidad y Reset de contraseña
+        ├── components/ui/          ← Button, Card, Field, Feedback
+        ├── context/ hooks/ lib/
+        └── index.css
 ```
+
+---
+
+## API nueva o ampliada
+
+| Método | Ruta | Uso |
+| --- | --- | --- |
+| `DELETE` | `/ventas/{id}` | Anular con `{"motivo": "..."}` (no borra) |
+| `GET` | `/ventas/resumen-dia?fecha=` | Totales, ticket, anuladas y desglose por método |
+| `GET` | `/ventas/cierre?fecha=` | Cierre de caja con efectivo esperado |
+| `GET` | `/ventas/?desde&hasta&estado&busqueda&limite&offset` | Listado paginado |
+| `GET` | `/reportes/exportar?desde&hasta` | CSV de ventas |
+| `GET` | `/reportes/eventos?tipo&limite` | Auditoría |
+| `GET` | `/reportes/tendencia?dias=7` | Ventas y ganancia por día (rellena días sin ventas) |
+| `GET` | `/productos/codigo/{codigo}` | Búsqueda por código de barras |
+| `GET` | `/productos/categorias` | Categorías con conteo |
+| `POST` | `/clientes/{id}/abono` | Pago parcial de crédito |
+| `POST` | `/auth/recuperar` | Solicita enlace de recuperación (respuesta genérica) |
+| `POST` | `/auth/reset` | Cambia la contraseña con el token del enlace |
+| `GET` | `/reportes/margenes?desde&hasta` | Ingresos, costo, ganancia y margen por producto |
 
 ---
 
@@ -348,15 +434,21 @@ Gest/
 docker compose up --build
 ```
 
-La app queda en http://localhost:8000. El `Dockerfile` compila el frontend en una etapa aparte, corre como usuario sin privilegios y expone un `HEALTHCHECK` contra `/health`.
-
----
+La app queda en http://localhost:8000.
 
 ## Recomendaciones para producción
 
-1. **Rota los secretos** si estuvieron expuestos en texto plano: `GROQ_API_KEY`, `SMTP_PASS`, la contraseña de PostgreSQL y `SECRET_KEY`.
+1. **Rota los secretos** si alguna vez estuvieron en texto plano: `GROQ_API_KEY`, `SMTP_PASS`, contraseña de PostgreSQL y `SECRET_KEY`.
 2. Sirve siempre por **HTTPS** y activa `ENABLE_HSTS=1`.
-3. Pon `EXPOSER_DOCS=0` para no publicar `/docs`.
-4. Define `CORS_ORIGINS` con tu dominio real.
-5. Si usas proxy inverso, define `TRUST_PROXY_HEADERS=1` solo si ese proxy reescribe `X-Forwarded-For`.
-6. Programa copias de seguridad de PostgreSQL y del directorio `facturas/`.
+3. Pon `EXPOSER_DOCS=0` y fija `ALLOWED_HOSTS` y `CORS_ORIGINS` con tu dominio real.
+4. Si usas proxy inverso, define `TRUST_PROXY_HEADERS=1` **solo** si ese proxy reescribe `X-Forwarded-For`.
+5. Programa copias de seguridad de PostgreSQL y del directorio `facturas/`.
+6. Con varios workers o instancias, mueve el rate limiting a Redis.
+7. Deja `LOG_RESET_LINK=0` en producción: el enlace de recuperación no debe quedar en logs.
+
+## Limitaciones conocidas
+
+- **Un usuario = un negocio**. No hay roles (cajero/gerente) ni auditoría por empleado; es el siguiente paso natural.
+- Sin compras a proveedores, gastos, impuestos ni multi-sucursal.
+- Sin modo offline/PWA ni impresión térmica de ticket (solo PDF A4).
+- Las migraciones son idempotentes, no versionadas con rollback.

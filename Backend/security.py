@@ -59,6 +59,11 @@ class RateLimiter:
         with self._lock:
             self._buckets.pop((scope, clave), None)
 
+    def reiniciar(self) -> None:
+        """Vacía todas las cuentas (usado por las pruebas)."""
+        with self._lock:
+            self._buckets.clear()
+
 
 rate_limiter = RateLimiter()
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CreditCard, History, Pencil, Plus, Search, Trash2, Users,
+  CreditCard, HandCoins, History, Pencil, Plus, Search, Trash2, Users,
 } from "lucide-react";
 
 import Modal, { ConfirmDialog } from "../components/Modal";
@@ -33,6 +33,10 @@ export default function ClientesPage() {
 
   const [aEliminar, setAEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
+
+  const [abonoDe, setAbonoDe] = useState(null);
+  const [montoAbono, setMontoAbono] = useState("");
+  const [notaAbono, setNotaAbono] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -102,6 +106,31 @@ export default function ClientesPage() {
       toast(e.message, "error");
     } finally {
       setCargandoCompras(false);
+    }
+  }
+
+  async function registrarAbono() {
+    if (!abonoDe) return;
+    const monto = Number(montoAbono);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      toast("Ingresa un monto mayor que cero", "error");
+      return;
+    }
+    setGuardando(true);
+    try {
+      await api.post(`/clientes/${abonoDe.id}/abono`, {
+        monto,
+        nota: notaAbono.trim() || null,
+      });
+      toast("Abono registrado");
+      setAbonoDe(null);
+      setMontoAbono("");
+      setNotaAbono("");
+      cargar();
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setGuardando(false);
     }
   }
 
@@ -202,7 +231,7 @@ export default function ClientesPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-sticky">
                 <thead>
                   <tr>
                     <th className="th">Código</th>
@@ -247,6 +276,18 @@ export default function ClientesPage() {
                         </td>
                         <td className="td">
                           <div className="flex items-center justify-end gap-0.5">
+                            {usado > 0 && (
+                              <IconButton
+                                label="Registrar abono"
+                                icon={HandCoins}
+                                onClick={() => {
+                                  setAbonoDe(c);
+                                  setMontoAbono("");
+                                  setNotaAbono("");
+                                }}
+                                className="text-secondary-600 dark:text-secondary-400 hover:bg-secondary-500/10"
+                              />
+                            )}
                             <IconButton
                               label="Editar"
                               icon={Pencil}
@@ -390,6 +431,75 @@ export default function ClientesPage() {
         )}
       </Modal>
 
+      <Modal
+        open={Boolean(abonoDe)}
+        onClose={() => setAbonoDe(null)}
+        title={`Registrar abono — ${abonoDe?.nombre ?? ""}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAbonoDe(null)} disabled={guardando}>
+              Cancelar
+            </Button>
+            <Button onClick={registrarAbono} loading={guardando} disabled={!montoAbono}>
+              Registrar abono
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3 rounded-lg bg-surface-sunken border border-border text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-content-muted text-xs">Saldo pendiente</span>
+              <span className="font-bold tabular">{fmtMoney(abonoDe?.credito_usado ?? 0)}</span>
+            </div>
+          </div>
+
+          <Field label="Monto (C$)" required>
+            <Input
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              value={montoAbono}
+              onChange={(e) => setMontoAbono(e.target.value)}
+              placeholder="0.00"
+              autoFocus
+            />
+          </Field>
+
+          <Field label="Nota" hint="Opcional. Queda en la auditoría.">
+            <Input
+              value={notaAbono}
+              onChange={(e) => setNotaAbono(e.target.value)}
+              placeholder="Ej: pago en efectivo"
+              maxLength={200}
+            />
+          </Field>
+
+          <div className="flex flex-wrap gap-1.5">
+            {[100, 500, 1000].map((monto) => (
+              <button
+                key={monto}
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={() => setMontoAbono(String(monto))}
+                disabled={monto > Number(abonoDe?.credito_usado ?? 0)}
+              >
+                C$ {monto}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() => setMontoAbono(String(abonoDe?.credito_usado ?? ""))}
+            >
+              Saldo completo
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <ConfirmDialog
         open={Boolean(aEliminar)}
         onClose={() => setAEliminar(null)}
@@ -397,7 +507,7 @@ export default function ClientesPage() {
         loading={guardando}
         title="Eliminar cliente"
         confirmLabel="Eliminar"
-        mensaje={`Se eliminará "${aEliminar?.nombre ?? ""}" y sus ventas asociadas dejarán de estar vinculadas a él.`}
+        mensaje={`Se eliminará "${aEliminar?.nombre ?? ""}". Si tiene ventas registradas el sistema no lo permitirá, para no reescribir el historial.`}
       />
     </div>
   );

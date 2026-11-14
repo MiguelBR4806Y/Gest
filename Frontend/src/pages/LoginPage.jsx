@@ -4,11 +4,12 @@ import {
   Eye, EyeOff, Loader2, Moon, Package, ShoppingCart, Sparkles, Sun, Users,
 } from "lucide-react";
 
+import Modal from "../components/Modal";
 import { Button } from "../components/ui/Button";
 import { Field, Input } from "../components/ui/Field";
 import { useAuth } from "../context/AuthContext";
-import { useToast } from "../context/ToastContext";
 import { useTheme } from "../hooks/useTheme";
+import { api } from "../lib/api";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
@@ -29,7 +30,6 @@ const FORM_INICIAL = {
 
 export default function LoginPage() {
   const { login, registro, googleLogin, user, loading: cargandoSesion } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
   const [esOscuro, , ciclarTema] = useTheme();
 
@@ -40,6 +40,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [googleListo, setGoogleListo] = useState(false);
   const refGoogle = useRef(null);
+
+  const [recuperarAbierto, setRecuperarAbierto] = useState(false);
+  const [identificador, setIdentificador] = useState("");
+  const [enviandoRecuperacion, setEnviandoRecuperacion] = useState(false);
+  const [recuperacionEnviada, setRecuperacionEnviada] = useState("");
+  const [errorRecuperacion, setErrorRecuperacion] = useState("");
 
   useEffect(() => {
     if (!cargandoSesion && user) navigate("/dashboard", { replace: true });
@@ -132,6 +138,32 @@ export default function LoginPage() {
     } finally {
       setEnviando(false);
     }
+  }
+
+  async function solicitarRecuperacion(e) {
+    e.preventDefault();
+    const valor = identificador.trim();
+    if (!valor) {
+      setErrorRecuperacion("Escribe tu usuario o correo");
+      return;
+    }
+    setEnviandoRecuperacion(true);
+    setErrorRecuperacion("");
+    try {
+      const r = await api.post("/auth/recuperar", { identificador: valor });
+      setRecuperacionEnviada(r.mensaje);
+    } catch (err) {
+      setErrorRecuperacion(err.message);
+    } finally {
+      setEnviandoRecuperacion(false);
+    }
+  }
+
+  function cerrarRecuperacion() {
+    setRecuperarAbierto(false);
+    setIdentificador("");
+    setRecuperacionEnviada("");
+    setErrorRecuperacion("");
   }
 
   return (
@@ -301,9 +333,7 @@ export default function LoginPage() {
             {modo === "login" && (
               <button
                 type="button"
-                onClick={() =>
-                  toast("Pide al administrador que restablezca tu contraseña.", "info")
-                }
+                onClick={() => setRecuperarAbierto(true)}
                 className="text-xs text-content-muted hover:text-content transition-colors w-full text-center"
               >
                 ¿Olvidaste tu contraseña?
@@ -345,6 +375,65 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
+      <Modal
+        open={recuperarAbierto}
+        onClose={cerrarRecuperacion}
+        title="Recuperar acceso"
+        size="sm"
+        footer={
+          recuperacionEnviada ? (
+            <Button onClick={cerrarRecuperacion}>Entendido</Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={cerrarRecuperacion} disabled={enviandoRecuperacion}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={solicitarRecuperacion}
+                loading={enviandoRecuperacion}
+                disabled={!identificador.trim()}
+              >
+                Enviar enlace
+              </Button>
+            </>
+          )
+        }
+      >
+        {recuperacionEnviada ? (
+          <div className="space-y-3">
+            <p className="text-sm text-content">{recuperacionEnviada}</p>
+            <p className="text-xs text-content-subtle">
+              Revisa también la carpeta de spam. El enlace caduca en 30 minutos y solo
+              puede usarse una vez.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={solicitarRecuperacion} className="space-y-4">
+            <p className="text-sm text-content-muted">
+              Escribe tu usuario o el correo de tu cuenta y te enviaremos un enlace para
+              crear una contraseña nueva.
+            </p>
+            <Field label="Usuario o correo" required>
+              <Input
+                value={identificador}
+                onChange={(e) => {
+                  setIdentificador(e.target.value);
+                  if (errorRecuperacion) setErrorRecuperacion("");
+                }}
+                placeholder="tu_usuario o correo@ejemplo.com"
+                autoComplete="username"
+                maxLength={254}
+                autoFocus
+              />
+            </Field>
+            {errorRecuperacion && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {errorRecuperacion}
+              </p>
+            )}
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

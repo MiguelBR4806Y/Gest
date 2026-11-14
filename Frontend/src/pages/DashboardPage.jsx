@@ -6,7 +6,8 @@ import {
   ShoppingCart, Tag, TrendingUp, Users, Wallet, X,
 } from "lucide-react";
 
-import { CardSkeleton, TableSkeleton } from "../components/ui/Feedback";
+import SalesTrend from "../components/SalesTrend";
+import { BadgeEstado, CardSkeleton, TableSkeleton } from "../components/ui/Feedback";
 import { Button, IconButton } from "../components/ui/Button";
 import { Card, CardHeader, EmptyState, StatCard } from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const [stockBajo, setStockBajo] = useState([]);
   const [promociones, setPromociones] = useState([]);
   const [anios, setAnios] = useState([]);
+  const [tendencia, setTendencia] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [avisoTasaVisible, setAvisoTasaVisible] = useState(
@@ -45,7 +47,7 @@ export default function DashboardPage() {
     setCargando(true);
     setError("");
     try {
-      const [dash, resumen, bajo, promos, years] = await Promise.all([
+      const [dash, resumen, bajo, promos, years, trend] = await Promise.all([
         api.get("/reportes/dashboard"),
         api.get("/ventas/resumen-dia").catch(() => null),
         api.get("/productos/stock-bajo").catch(() => []),
@@ -53,11 +55,16 @@ export default function DashboardPage() {
         // El endpoint devuelve { anios: [...] }, no un array — antes se
         // comprobaba Array.isArray sobre el objeto y nunca se pintaba nada.
         api.get("/organizacion/anios").catch(() => null),
+        api.get("/reportes/tendencia?dias=7").catch(() => null),
       ]);
 
       setMetricas({
         total_productos: dash.total_productos,
         ventas_hoy: dash.resumen_dia?.total_ventas ?? 0,
+        ganancia_hoy: dash.resumen_dia?.ganancia ?? 0,
+        margen_hoy: dash.resumen_dia?.margen_pct ?? 0,
+        variacion: dash.resumen_dia?.variacion_vs_ayer ?? null,
+        anuladas: dash.resumen_dia?.anuladas ?? { numero: 0, total: 0 },
         total_clientes: dash.total_clientes,
         alertas_stock: dash.stock_bajo,
       });
@@ -65,6 +72,7 @@ export default function DashboardPage() {
       setStockBajo(Array.isArray(bajo) ? bajo : []);
       setPromociones(Array.isArray(promos) ? promos.filter((p) => p.activa) : []);
       setAnios(Array.isArray(years?.anios) ? years.anios : []);
+      setTendencia(Array.isArray(trend?.dias) ? trend.dias : []);
     } catch (e) {
       setError(e.message || "No se pudo cargar el dashboard");
     } finally {
@@ -160,7 +168,7 @@ export default function DashboardPage() {
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
             <StatCard
               icon={Package}
               label="Productos"
@@ -171,8 +179,19 @@ export default function DashboardPage() {
               icon={TrendingUp}
               label="Ventas de hoy"
               value={fmtMoney(metricas?.ventas_hoy)}
-              sub="Acumulado del día"
+              sub={
+                metricas?.variacion != null
+                  ? `${metricas.variacion >= 0 ? "▲" : "▼"} ${Math.abs(metricas.variacion).toFixed(1)}% vs ayer`
+                  : "Acumulado del día"
+              }
               tono="green"
+            />
+            <StatCard
+              icon={Banknote}
+              label="Ganancia de hoy"
+              value={fmtMoney(metricas?.ganancia_hoy)}
+              sub={`Margen ${Number(metricas?.margen_hoy || 0).toFixed(1)}%`}
+              tono={Number(metricas?.ganancia_hoy) >= 0 ? "green" : "red"}
             />
             <StatCard
               icon={Users}
@@ -188,6 +207,17 @@ export default function DashboardPage() {
               tono={metricas?.alertas_stock > 0 ? "red" : "brand"}
             />
           </div>
+
+          <Card>
+            <CardHeader
+              icon={TrendingUp}
+              title="Tendencia"
+              subtitle="Ventas y ganancia de la última semana"
+            />
+            <div className="p-5">
+              <SalesTrend dias={tendencia} cargando={cargando} />
+            </div>
+          </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
@@ -219,8 +249,17 @@ export default function DashboardPage() {
                           <td className="td max-w-[12rem] truncate">
                             {v.cliente_nombre || "Consumidor final"}
                           </td>
-                          <td className="td text-content-muted">{formatHora(v.fecha_hora)}</td>
-                          <td className="td text-right font-medium tabular">
+                          <td className="td text-content-muted">
+                            <span className="flex items-center gap-2">
+                              {formatHora(v.fecha_hora)}
+                              {v.estado === "anulada" && <BadgeEstado estado="anulada" />}
+                            </span>
+                          </td>
+                          <td
+                            className={`td text-right font-medium tabular ${
+                              v.estado === "anulada" ? "line-through opacity-60" : ""
+                            }`}
+                          >
                             {fmtMoney(v.total)}
                           </td>
                         </tr>

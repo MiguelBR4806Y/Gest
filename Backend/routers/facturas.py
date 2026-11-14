@@ -1,20 +1,30 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import FileResponse
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from Backend.db.database import get_db
-from Backend.db.models import Usuario
-from Backend.routers.auth import verificar_token
-from Backend.security import escapar_xml, es_color_hex, sanear_texto
-from sqlalchemy import text
 import os
 import re
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime
+
 from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    Image,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+from sqlalchemy import text
+
+from Backend.db.database import get_db
+from Backend.db.models import Usuario
+from Backend.dinero import dinero
+from Backend.routers.auth import verificar_token
+from Backend.security import es_color_hex, escapar_xml, sanear_texto
+from Backend.tiempo import ZONA_POR_DEFECTO, a_local
 
 load_dotenv()
 
@@ -26,20 +36,16 @@ DIAS_ES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domin
 router = APIRouter(prefix="/facturas", tags=["Facturas"])
 
 
-def fmt(valor: float) -> str:
-    return f"{valor:,.2f}"
+def fmt(valor) -> str:
+    """Formato con separador de miles a partir del Decimal exacto."""
+    return f"{dinero(valor):,.2f}"
 
 
-def a_zona(fecha_hora, zona="America/Managua") -> datetime:
-    tz = ZoneInfo(zona)
-    if isinstance(fecha_hora, datetime):
-        return fecha_hora.astimezone(tz)
-    limpio = fecha_hora.replace("T", " ")
-    dt = datetime.strptime(limpio[:19], "%Y-%m-%d %H:%M:%S")
-    return dt.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz)
+def a_zona(fecha_hora, zona=ZONA_POR_DEFECTO) -> datetime:
+    return a_local(fecha_hora, zona)
 
 
-def formatear_fecha_hora(fecha_hora_str: str, zona="America/Managua") -> str:
+def formatear_fecha_hora(fecha_hora_str, zona=ZONA_POR_DEFECTO) -> str:
     dt = a_zona(fecha_hora_str, zona)
     return dt.strftime("%d/%m/%Y %I:%M %p")
 
@@ -50,13 +56,15 @@ def sanitizar_nombre_carpeta(nombre: str) -> str:
     return limpio or "Negocio"
 
 
-def carpeta_destino(nombre_negocio: str, fecha_nica: datetime) -> str:
-    inicio_semana = fecha_nica - timedelta(days=fecha_nica.weekday())
+def carpeta_destino(nombre_negocio: str, fecha_local: datetime) -> str:
+    from datetime import timedelta
+
+    inicio_semana = fecha_local - timedelta(days=fecha_local.weekday())
     fin_semana = inicio_semana + timedelta(days=6)
 
     nombre_negocio_seguro = sanitizar_nombre_carpeta(nombre_negocio)
     nombre_semana = f"Semana_{inicio_semana.strftime('%Y-%m-%d')}_a_{fin_semana.strftime('%Y-%m-%d')}"
-    nombre_dia = DIAS_ES[fecha_nica.weekday()]
+    nombre_dia = DIAS_ES[fecha_local.weekday()]
 
     return os.path.join(FACTURAS_DIR, nombre_negocio_seguro, nombre_semana, nombre_dia)
 
@@ -70,20 +78,37 @@ def get_config_negocio(session, usuario_id: int) -> dict:
             "color_acento": u.color_acento or "#1D9E75",
             "logo_path": u.logo_path,
             "tasa_cambio": u.tasa_cambio or 36.0,
-            "zona_horaria": u.zona_horaria or "America/Managua",
+            "zona_horaria": u.zona_horaria or ZONA_POR_DEFECTO,
         }
 
-    return {"nombre_negocio": NOMBRE_NEGOCIO, "color_acento": "#1D9E75", "logo_path": None, "tasa_cambio": 36.0, "zona_horaria": "America/Managua"}
+    return {
+        "nombre_negocio": NOMBRE_NEGOCIO,
+        "color_acento": "#1D9E75",
+        "logo_path": None,
+        "tasa_cambio": dinero(36),
+        "zona_horaria": ZONA_POR_DEFECTO,
+    }
 
 
-def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, color_acento: str = None, logo_path: str = None, tasa_cambio: float = 36.0, zona_horaria: str = "America/Managua") -> str:
+def generar_pdf(
+    venta_id,
+    venta: dict,
+    items: list,
+    nombre_negocio: str = None,
+    color_acento: str = None,
+    logo_path: str = None,
+    tasa_cambio=36,
+    zona_horaria: str = ZONA_POR_DEFECTO,
+    estado: str = "completada",
+) -> str:
     # Estos valores llegan por query string y acaban dentro de un Paragraph de
     # reportlab, que interpreta marcado tipo <b>. Se sanean antes de usarlos.
     nombre = sanear_texto(nombre_negocio, 120) or NOMBRE_NEGOCIO
     color = color_acento if es_color_hex(color_acento or "") else "#1D9E75"
+    tasa = dinero(tasa_cambio) or dinero(36)
 
-    fecha_nica = a_zona(venta["fecha_hora"], zona_horaria)
-    carpeta = carpeta_destino(nombre, fecha_nica)
+    fecha_local = a_zona(venta["fecha_hora"], zona_horaria)
+    carpeta = carpeta_destino(nombre, fecha_local)
     os.makedirs(carpeta, exist_ok=True)
 
     path = os.path.join(carpeta, f"factura_{venta_id}.pdf")
@@ -93,16 +118,27 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
 
     if logo_path and os.path.exists(logo_path):
         try:
-            elementos.append(Image(logo_path, width=1.5 * inch, height=1.5 * inch, kind='proportional'))
+            elementos.append(Image(logo_path, width=1.5 * inch, height=1.5 * inch, kind="proportional"))
             elementos.append(Spacer(1, 0.1 * inch))
         except Exception:
             pass
 
     elementos.append(Paragraph(f"<b>{escapar_xml(nombre)}</b>", styles["Title"]))
     elementos.append(Spacer(1, 0.2 * inch))
+
+    if estado == "anulada":
+        aviso = ParagraphStyle(
+            "Anulada", parent=styles["Normal"], textColor=colors.HexColor("#B91C1C"),
+            fontSize=13, spaceBefore=4, spaceAfter=8,
+        )
+        elementos.append(Paragraph("<b>VENTA ANULADA</b>", aviso))
+
     elementos.append(Paragraph(f"<b>Factura #</b>{venta_id}", styles["Normal"]))
-    elementos.append(Paragraph(f"<b>Fecha:</b> {formatear_fecha_hora(venta['fecha_hora'], zona_horaria)}", styles["Normal"]))
-    cliente = escapar_xml(sanear_texto(venta.get('cliente_nombre'), 120) or 'Consumidor final')
+    elementos.append(Paragraph(
+        f"<b>Fecha:</b> {formatear_fecha_hora(venta['fecha_hora'], zona_horaria)}",
+        styles["Normal"],
+    ))
+    cliente = escapar_xml(sanear_texto(venta.get("cliente_nombre"), 120) or "Consumidor final")
     elementos.append(Paragraph(f"<b>Cliente:</b> {cliente}", styles["Normal"]))
     elementos.append(Spacer(1, 0.3 * inch))
 
@@ -112,28 +148,27 @@ def generar_pdf(venta_id, venta: dict, items: list, nombre_negocio: str = None, 
         Paragraph("Producto", styles["Normal"]),
         Paragraph("Cant.", styles["Normal"]),
         Paragraph("Precio Unit.", styles["Normal"]),
-        Paragraph("Subtotal", styles["Normal"])
+        Paragraph("Subtotal", styles["Normal"]),
     ]]
     for item in items:
-        subtotal = item["cantidad"] * item["precio_unitario"]
-        subtotal_usd = subtotal / tasa_cambio
-        pu_usd = item["precio_unitario"] / tasa_cambio
+        precio = dinero(item["precio_unitario"])
+        subtotal = dinero(precio * int(item["cantidad"]))
         data.append([
             Paragraph(escapar_xml(sanear_texto(item["nombre"], 120)), cell_style),
             Paragraph(str(item["cantidad"]), cell_style),
-            Paragraph(f"C$ {fmt(item['precio_unitario'])}<br/>US$ {fmt(pu_usd)}", cell_style),
-            Paragraph(f"C$ {fmt(subtotal)}<br/>US$ {fmt(subtotal_usd)}", cell_style),
+            Paragraph(f"C$ {fmt(precio)}<br/>US$ {fmt(precio / tasa)}", cell_style),
+            Paragraph(f"C$ {fmt(subtotal)}<br/>US$ {fmt(subtotal / tasa)}", cell_style),
         ])
 
-    total_usd = venta["total"] / tasa_cambio
+    total = dinero(venta["total"])
     data.append([
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("<b>Total:</b>", styles["Normal"]),
-        Paragraph(f"<b>C$ {fmt(venta['total'])}</b><br/><b>US$ {fmt(total_usd)}</b>", styles["Normal"]),
+        Paragraph(f"<b>C$ {fmt(total)}</b><br/><b>US$ {fmt(total / tasa)}</b>", styles["Normal"]),
     ])
 
-    tabla = Table(data, colWidths=[3*inch, 0.7*inch, 1.65*inch, 1.65*inch])
+    tabla = Table(data, colWidths=[3 * inch, 0.7 * inch, 1.65 * inch, 1.65 * inch])
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -164,13 +199,16 @@ def previsualizar_factura(
     venta_dict = {
         "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "cliente_nombre": "Cliente de ejemplo",
-        "total": 20500.00,
+        "total": dinero(20500),
     }
     items_list = [
-        {"nombre": "PlayStation 5", "cantidad": 1, "precio_unitario": 20500.00}
+        {"nombre": "PlayStation 5", "cantidad": 1, "precio_unitario": dinero(20500)}
     ]
 
-    path = generar_pdf("preview", venta_dict, items_list, nombre_negocio, color_acento, config["logo_path"], config["tasa_cambio"], config["zona_horaria"])
+    path = generar_pdf(
+        "preview", venta_dict, items_list, nombre_negocio, color_acento,
+        config["logo_path"], config["tasa_cambio"], config["zona_horaria"],
+    )
     return FileResponse(path, media_type="application/pdf")
 
 
@@ -181,12 +219,13 @@ def obtener_factura(venta_id: int, usuario_id: int = Depends(verificar_token)):
 
         venta = session.execute(
             text("""
-                SELECT v.id, v.total, v.fecha_hora, c.nombre as cliente_nombre
+                SELECT v.id, v.total, v.fecha_hora, v.estado,
+                       c.nombre AS cliente_nombre
                 FROM ventas v
                 LEFT JOIN clientes c ON v.cliente_id = c.id
                 WHERE v.id = :vid AND v.usuario_id = :uid
             """),
-            {"vid": venta_id, "uid": usuario_id}
+            {"vid": venta_id, "uid": usuario_id},
         ).mappings().first()
 
         if not venta:
@@ -197,13 +236,18 @@ def obtener_factura(venta_id: int, usuario_id: int = Depends(verificar_token)):
                 SELECT p.nombre, vi.cantidad, vi.precio_unitario
                 FROM venta_items vi
                 JOIN productos p ON vi.producto_id = p.id
-                WHERE vi.venta_id = :vid
+                JOIN ventas v ON vi.venta_id = v.id
+                WHERE vi.venta_id = :vid AND v.usuario_id = :uid
             """),
-            {"vid": venta_id}
+            {"vid": venta_id, "uid": usuario_id},
         ).mappings().fetchall()
 
         venta_dict = dict(venta)
         items_list = [dict(i) for i in items]
 
-    path = generar_pdf(venta_id, venta_dict, items_list, config["nombre_negocio"], config["color_acento"], config["logo_path"], config["tasa_cambio"], config["zona_horaria"])
+    path = generar_pdf(
+        venta_id, venta_dict, items_list, config["nombre_negocio"],
+        config["color_acento"], config["logo_path"], config["tasa_cambio"],
+        config["zona_horaria"], venta_dict.get("estado", "completada"),
+    )
     return FileResponse(path, media_type="application/pdf")

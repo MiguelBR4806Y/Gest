@@ -10,6 +10,9 @@ import ClientesPage from "./pages/ClientesPage";
 import OrganizacionPage from "./pages/OrganizacionPage";
 import PromocionesPage from "./pages/PromocionesPage";
 import GestiPage from "./pages/GestiPage";
+import ActividadPage from "./pages/ActividadPage";
+import RentabilidadPage from "./pages/RentabilidadPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 
 function PrivateRoute({ children }) {
@@ -34,6 +37,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/reset" element={<ResetPasswordPage />} />
       <Route path="/dashboard"    element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
       <Route path="/inventario"   element={<PrivateRoute><InventarioPage /></PrivateRoute>} />
       <Route path="/ventas"       element={<PrivateRoute><VentasPage /></PrivateRoute>} />
@@ -41,6 +45,8 @@ function AppRoutes() {
       <Route path="/organizacion" element={<PrivateRoute><OrganizacionPage /></PrivateRoute>} />
       <Route path="/promociones"  element={<PrivateRoute><PromocionesPage /></PrivateRoute>} />
       <Route path="/gesti"        element={<PrivateRoute><GestiPage /></PrivateRoute>} />
+      <Route path="/actividad"    element={<PrivateRoute><ActividadPage /></PrivateRoute>} />
+      <Route path="/rentabilidad" element={<PrivateRoute><RentabilidadPage /></PrivateRoute>} />
       <Route path="*"             element={<Navigate to="/" replace />} />
     </Routes>
   );

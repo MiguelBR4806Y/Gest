@@ -77,3 +77,10 @@ const TONOS_BADGE = {
 export function BadgeMetodoPago({ metodo }) {
   return <span className={TONOS_BADGE[metodo] ?? "badge-neutral"}>{metodo ?? "—"}</span>;
 }
+
+export function BadgeEstado({ estado }) {
+  if (estado === "anulada") {
+    return <span className="badge-red">Anulada</span>;
+  }
+  return <span className="badge-green">Completada</span>;
+}

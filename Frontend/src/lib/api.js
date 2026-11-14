@@ -49,10 +49,13 @@ function manejarNoAutorizado(status) {
   window.dispatchEvent(new CustomEvent(EVENTO_SESION_EXPIRADA));
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, opciones = {}) {
   const opts = {
     method,
-    headers: { Authorization: "Bearer " + getToken() },
+    headers: {
+      Authorization: "Bearer " + getToken(),
+      ...(opciones.headers || {}),
+    },
   };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
@@ -98,10 +101,10 @@ async function descargarArchivo(path) {
 }
 
 export const api = {
-  get: (path) => request("GET", path),
-  post: (path, body) => request("POST", path, body),
-  put: (path, body) => request("PUT", path, body),
-  delete: (path, body) => request("DELETE", path, body),
+  get: (path, opciones) => request("GET", path, undefined, opciones),
+  post: (path, body, opciones) => request("POST", path, body, opciones),
+  put: (path, body, opciones) => request("PUT", path, body, opciones),
+  delete: (path, body, opciones) => request("DELETE", path, body, opciones),
 
   postForm: async (path, formData) => {
     const res = await fetch(BASE + path, {

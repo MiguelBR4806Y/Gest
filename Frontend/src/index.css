@@ -231,8 +231,40 @@
   }
   .table-row:last-child { @apply border-b-0; }
 
+  /* Cabecera fija: en listas largas el usuario no pierde las columnas. */
+  .table-sticky thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: rgb(var(--surface-elevated));
+    box-shadow: inset 0 -1px 0 rgb(var(--border-default));
+  }
+
+  /* ── Filtros segmentados ── */
+  .segmented {
+    @apply inline-flex items-center gap-1 p-1 rounded-lg bg-surface-sunken border border-border;
+  }
+  .segment {
+    @apply px-3 py-1.5 rounded-md text-xs font-medium text-content-muted
+           transition-colors duration-150 hover:text-content;
+  }
+  .segment-active { @apply bg-surface-card text-content shadow-sm; }
+
+  /* ── Stepper de cantidad ── */
+  .stepper { @apply inline-flex items-center rounded-lg border border-border bg-surface-card; }
+  .stepper-btn {
+    @apply flex h-8 w-8 items-center justify-center text-content-muted
+           transition-colors hover:bg-surface-hover hover:text-content
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .stepper-value { @apply w-9 text-center text-sm font-semibold tabular text-content; }
+
   /* ── Métricas ── */
-  .metric-card { @apply card p-5 flex items-start gap-4; }
+  .metric-card {
+    @apply card p-5 flex items-start gap-4
+           transition-[border-color,box-shadow,transform] duration-200
+           hover:border-border-strong hover:shadow-md;
+  }
   .metric-icon { @apply w-10 h-10 rounded-lg flex items-center justify-center shrink-0; }
   .metric-value { @apply text-xl font-bold text-content leading-tight; }
   .metric-label { @apply text-xs font-medium text-content-muted; }
@@ -240,7 +272,7 @@
   .section-title { @apply text-sm font-semibold text-content; }
 
   .page-header { @apply flex flex-col sm:flex-row sm:items-center justify-between gap-3; }
-  .page-header h1 { @apply text-2xl font-bold text-content tracking-tight; }
+  .page-header h1 { @apply text-2xl xl:text-[1.75rem] font-bold text-content tracking-tight; }
   .page-header p  { @apply text-sm text-content-muted mt-1; }
 
   .empty-state {
@@ -255,14 +287,60 @@
            transition-colors duration-150;
   }
   .nav-item-active { @apply bg-brand-500/10 text-brand-700 dark:text-brand-300 font-semibold; }
+  .nav-item-active::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 18px;
+    width: 3px;
+    border-radius: 9999px;
+    background: rgb(var(--brand-600));
+  }
   .nav-item-idle   { @apply text-content-muted hover:text-content hover:bg-surface-hover; }
 
   /* ── Esqueletos de carga ── */
-  .skeleton { @apply bg-content-subtle/15 rounded-md animate-pulse; }
+  .skeleton {
+    @apply rounded-md;
+    background: linear-gradient(
+      100deg,
+      rgb(var(--on-subtle) / 0.10) 20%,
+      rgb(var(--on-subtle) / 0.18) 40%,
+      rgb(var(--on-subtle) / 0.10) 60%
+    );
+    background-size: 220% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+
+  /* ── Teclas y atajos ── */
+  .kbd {
+    @apply inline-flex items-center rounded border border-border bg-surface-elevated
+           px-1.5 py-0.5 text-[10px] font-semibold text-content-muted;
+  }
 }
 
 @layer utilities {
   .tabular { font-variant-numeric: tabular-nums; }
+
+  @keyframes skeleton-shimmer {
+    0% { background-position: 120% 0; }
+    100% { background-position: -120% 0; }
+  }
+
+  /* Ergonomía táctil: objetivos de 44px y 16px de fuente en inputs para que
+     iOS Safari no haga zoom al enfocar un campo. */
+  @media (pointer: coarse) {
+    .btn-primary, .btn-secondary, .btn-danger { min-height: 44px; }
+    .btn-icon { width: 40px; height: 40px; }
+    .input { font-size: 16px; }
+    .nav-item { min-height: 44px; }
+  }
+
+  .chart-bar {
+    transition: opacity 150ms ease-out;
+  }
+  .chart-bar:hover { opacity: 0.75; }
 
   .aurora-blob {
     position: absolute;

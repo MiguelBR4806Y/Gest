@@ -16,9 +16,11 @@ import { api, formatHora, fmtMoney, fmtMoneyUSD } from "../lib/api";
 const VACIO = {
   nombre: "",
   categoria: "",
+  codigo_barras: "",
   stock: 0,
   stock_minimo: 5,
   precio: 0,
+  costo: 0,
   promocion_id: "",
 };
 
@@ -81,9 +83,11 @@ export default function InventarioPage() {
     setForm({
       nombre: p.nombre,
       categoria: p.categoria ?? "",
+      codigo_barras: p.codigo_barras ?? "",
       stock: p.stock,
       stock_minimo: p.stock_minimo,
       precio: p.precio,
+      costo: p.costo ?? 0,
       promocion_id: p.promocion_id ?? "",
     });
     setAbierta(true);
@@ -96,9 +100,11 @@ export default function InventarioPage() {
       const cuerpo = {
         nombre: form.nombre.trim(),
         categoria: form.categoria.trim() || null,
+        codigo_barras: form.codigo_barras.trim() || null,
         stock: Number(form.stock) || 0,
         stock_minimo: Number(form.stock_minimo) || 0,
         precio: Number(form.precio) || 0,
+        costo: Number(form.costo) || 0,
         promocion_id: form.promocion_id ? Number(form.promocion_id) : null,
       };
       if (editando) await api.put(`/productos/${editando}`, cuerpo);
@@ -240,7 +246,7 @@ export default function InventarioPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-sticky">
                 <thead>
                   <tr>
                     <th className="th">Producto</th>
@@ -257,7 +263,14 @@ export default function InventarioPage() {
                       <tr key={p.id} className="table-row">
                         <td className="td font-medium">
                           <span className="flex items-center gap-2 min-w-0">
-                            <span className="truncate">{p.nombre}</span>
+                            <span className="min-w-0">
+                              <span className="block truncate">{p.nombre}</span>
+                              {p.codigo_barras && (
+                                <span className="block text-[11px] text-content-subtle font-mono truncate">
+                                  {p.codigo_barras}
+                                </span>
+                              )}
+                            </span>
                             {p.promocion && (
                               <span className="badge-yellow shrink-0">
                                 <Tag size={9} aria-hidden="true" />
@@ -280,6 +293,17 @@ export default function InventarioPage() {
                           <span className="block text-xs text-content-subtle">
                             {fmtMoneyUSD(p.precio / tasa)}
                           </span>
+                          {Number(p.costo) > 0 && (
+                            <span
+                              className={`block text-xs font-medium ${
+                                Number(p.margen_pct) >= 20
+                                  ? "text-secondary-600 dark:text-secondary-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
+                            >
+                              Margen {Number(p.margen_pct || 0).toFixed(0)}%
+                            </span>
+                          )}
                         </td>
                         <td className="td">
                           <div className="flex items-center justify-end gap-0.5">
@@ -338,14 +362,26 @@ export default function InventarioPage() {
             />
           </Field>
 
-          <Field label="Categoría">
-            <Input
-              value={form.categoria}
-              onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
-              placeholder="Ej: Bebidas, Lácteos…"
-              maxLength={80}
-            />
-          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Categoría">
+              <Input
+                value={form.categoria}
+                onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
+                placeholder="Ej: Bebidas, Lácteos…"
+                maxLength={80}
+              />
+            </Field>
+            <Field label="Código de barras" hint="Se usa con el escáner en Ventas.">
+              <Input
+                value={form.codigo_barras}
+                onChange={(e) => setForm((f) => ({ ...f, codigo_barras: e.target.value }))}
+                placeholder="Escanea o escribe el código"
+                maxLength={64}
+                autoComplete="off"
+                className="font-mono"
+              />
+            </Field>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label={editando ? "Stock actual" : "Stock inicial"}>
@@ -383,6 +419,24 @@ export default function InventarioPage() {
               inputMode="decimal"
               value={form.precio}
               onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))}
+            />
+          </Field>
+
+          <Field
+            label="Costo (C$)"
+            hint={
+              Number(form.precio) > 0 && Number(form.costo) > 0
+                ? `Margen: ${((1 - Number(form.costo) / Number(form.precio)) * 100).toFixed(1)}%`
+                : "Cuánto te cuesta reponerlo. Sirve para calcular la ganancia."
+            }
+          >
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={form.costo}
+              onChange={(e) => setForm((f) => ({ ...f, costo: e.target.value }))}
             />
           </Field>
 

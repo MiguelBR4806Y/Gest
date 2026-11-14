@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  Bot, ChevronLeft, FolderOpen, LayoutDashboard, LogOut, Mail,
+  Activity, Bot, ChevronLeft, FolderOpen, LayoutDashboard, LogOut, Mail, Percent,
   Menu, Monitor, Moon, Package, Settings, ShoppingCart, Sun,
   Tag, Users, X, AlertTriangle,
 } from "lucide-react";
@@ -15,13 +15,41 @@ import { EVENTO_SESION_EXPIRADA } from "../lib/api";
 import { aplicarColorAcento } from "../lib/color";
 
 const NAV = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/inventario", icon: Package, label: "Inventario" },
+  {
+    grupo: "Principal",
+    items: [{ to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" }],
+  },
+  {
+    grupo: "Operación",
+    items: [
+      { to: "/ventas", icon: ShoppingCart, label: "Ventas" },
+      { to: "/inventario", icon: Package, label: "Inventario" },
+      { to: "/clientes", icon: Users, label: "Clientes" },
+      { to: "/promociones", icon: Tag, label: "Promociones" },
+    ],
+  },
+  {
+    grupo: "Análisis",
+    items: [
+      { to: "/rentabilidad", icon: Percent, label: "Rentabilidad" },
+      { to: "/gesti", icon: Bot, label: "Gesti IA" },
+      { to: "/actividad", icon: Activity, label: "Actividad" },
+    ],
+  },
+  {
+    grupo: "Documentos",
+    items: [{ to: "/organizacion", icon: FolderOpen, label: "Organización" }],
+  },
+];
+
+const NAV_PLANO = NAV.flatMap((g) => g.items);
+
+// Accesos del pulgar para móvil: el resto vive en el drawer.
+const NAV_MOVIL = [
+  { to: "/dashboard", icon: LayoutDashboard, label: "Inicio" },
   { to: "/ventas", icon: ShoppingCart, label: "Ventas" },
+  { to: "/inventario", icon: Package, label: "Stock" },
   { to: "/clientes", icon: Users, label: "Clientes" },
-  { to: "/promociones", icon: Tag, label: "Promociones" },
-  { to: "/gesti", icon: Bot, label: "Gesti IA" },
-  { to: "/organizacion", icon: FolderOpen, label: "Organización" },
 ];
 
 const TEMA_ETIQUETA = { system: "Tema del sistema", dark: "Modo oscuro", light: "Modo claro" };
@@ -45,8 +73,18 @@ export default function Layout({ children }) {
   );
 
   const titulo = useMemo(
-    () => NAV.find((n) => pathname.startsWith(n.to))?.label ?? "Bravo's Gest",
+    () => NAV_PLANO.find((n) => pathname.startsWith(n.to))?.label ?? "Bravo's Gest",
     [pathname]
+  );
+
+  const fechaHoy = useMemo(
+    () => new Date().toLocaleDateString("es-NI", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      timeZone: user?.zona_horaria || "America/Managua",
+    }),
+    [user?.zona_horaria]
   );
 
   useEffect(() => {
@@ -125,21 +163,31 @@ export default function Layout({ children }) {
       </div>
 
       {/* Navegación */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-0.5" aria-label="Navegación principal">
-        {NAV.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={colapsado ? label : undefined}
-            className={({ isActive }) =>
-              `nav-item ${isActive ? "nav-item-active" : "nav-item-idle"} ${
-                colapsado ? "justify-center px-0" : ""
-              }`
-            }
-          >
-            <Icon size={18} className="shrink-0" aria-hidden="true" />
-            {!colapsado && <span className="truncate">{label}</span>}
-          </NavLink>
+      <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-4" aria-label="Navegación principal">
+        {NAV.map((grupo) => (
+          <div key={grupo.grupo} className="space-y-0.5">
+            {!colapsado && (
+              <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-content-subtle">
+                {grupo.grupo}
+              </p>
+            )}
+            {colapsado && <div className="mx-2 mb-1.5 h-px bg-border/70" aria-hidden="true" />}
+            {grupo.items.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                title={colapsado ? label : undefined}
+                className={({ isActive }) =>
+                  `nav-item ${isActive ? "nav-item-active" : "nav-item-idle"} ${
+                    colapsado ? "justify-center px-0" : ""
+                  }`
+                }
+              >
+                <Icon size={18} className="shrink-0" aria-hidden="true" />
+                {!colapsado && <span className="truncate">{label}</span>}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
@@ -233,6 +281,12 @@ export default function Layout({ children }) {
 
       {/* Contenido */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <a
+          href="#contenido"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:top-3 focus:left-3 focus:rounded-lg focus:bg-surface-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-content focus:shadow-lg"
+        >
+          Saltar al contenido
+        </a>
         <header className="flex items-center gap-3 px-4 sm:px-6 h-16 bg-surface-card border-b border-border shrink-0">
           <IconButton
             label="Abrir menú"
@@ -243,6 +297,9 @@ export default function Layout({ children }) {
           />
 
           <h1 className="text-sm font-semibold text-content truncate">{titulo}</h1>
+          <span className="hidden md:block text-xs text-content-subtle capitalize truncate">
+            {fechaHoy}
+          </span>
 
           <div className="ml-auto flex items-center gap-2">
             <IconButton
@@ -271,7 +328,7 @@ export default function Layout({ children }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main id="contenido" className="flex-1 overflow-y-auto p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-8">
           {user && !alertaCorreoOculta && !user.email && (
             <AvisoCompletarPerfil
               onConfigurar={() => abrirAjustes("seguridad")}
@@ -295,6 +352,51 @@ export default function Layout({ children }) {
           {children}
         </main>
       </div>
+
+      <nav
+        className="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface-card/95 backdrop-blur-md"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        aria-label="Navegación rápida"
+      >
+        <div className="grid grid-cols-5">
+          {NAV_MOVIL.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium transition-colors ${
+                  isActive
+                    ? "text-brand-700 dark:text-brand-300"
+                    : "text-content-muted hover:text-content"
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                      isActive ? "bg-brand-500/15" : ""
+                    }`}
+                  >
+                    <Icon size={18} aria-hidden="true" />
+                  </span>
+                  {label}
+                </>
+              )}
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            onClick={() => setDrawerAbierto(true)}
+            className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium text-content-muted hover:text-content transition-colors"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg">
+              <Menu size={18} aria-hidden="true" />
+            </span>
+            Más
+          </button>
+        </div>
+      </nav>
 
       <SettingsModal
         open={ajustesAbierto}

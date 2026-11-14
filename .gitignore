@@ -5,6 +5,10 @@ __pycache__/
 .env
 .DS_Store
 facturas/
+logos/
+plantillas/
 node_modules/
 Frontend/dist/
 .vite/
+.pytest_cache/
+.ruff_cache/

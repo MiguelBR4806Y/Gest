@@ -9,6 +9,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 load_dotenv()
 
@@ -16,11 +18,28 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY no está configurada en el entorno")
 
+# Un SECRET_KEY corto debilita todos los JWT emitidos.
+if len(SECRET_KEY) < 32:
+    logging.getLogger("app").warning(
+        "SECRET_KEY tiene menos de 32 caracteres; genera una más larga"
+    )
+
 logger = logging.getLogger("app")
 
-from Backend.db import inicializar_db
-from Backend.routers import productos, clientes, ventas, reportes, auth, facturas, organizacion, promociones
-from Backend.security import dentro_de
+# Los imports del backend van después de load_dotenv() a propósito: los
+# módulos leen DATABASE_URL y SECRET_KEY al importarse.
+from Backend.db import inicializar_db  # noqa: E402
+from Backend.routers import (  # noqa: E402
+    auth,
+    clientes,
+    facturas,
+    organizacion,
+    productos,
+    promociones,
+    reportes,
+    ventas,
+)
+from Backend.security import dentro_de  # noqa: E402
 
 
 @asynccontextmanager
@@ -33,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="NicaGest API",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan,
     docs_url="/docs" if os.getenv("EXPOSER_DOCS", "1") == "1" else None,
     redoc_url=None,
@@ -46,7 +65,18 @@ PREFIJOS_API = (
     "/img", "/assets", "/health",
 )
 
+# Rutas de la SPA que coinciden con un prefijo de API. Sin esta lista, entrar
+# directo o refrescar /ventas devolvía 404 porque el fallback lo trataba como
+# endpoint de API. Las rutas de API reales tienen al menos un segmento más.
+RUTAS_SPA = frozenset({
+    "/dashboard", "/inventario", "/ventas", "/clientes", "/promociones",
+    "/organizacion", "/gesti", "/actividad", "/rentabilidad", "/reset",
+})
+
 DIST = os.path.abspath("Frontend/dist")
+
+# 12 MB cubre la plantilla PDF (10 MB) con margen para el envelope multipart.
+MAX_CUERPO_BYTES = int(os.getenv("MAX_BODY_BYTES", str(12 * 1024 * 1024)))
 
 
 # ── Request ID + logging middleware ──
@@ -58,6 +88,26 @@ async def log_requests(request: Request, call_next):
     logger.info("[%s] %s %s -> %s", req_id, request.method, request.url.path, response.status_code)
     response.headers["X-Request-ID"] = req_id
     return response
+
+
+# ── Límite de tamaño del cuerpo ──
+@app.middleware("http")
+async def limitar_cuerpo(request: Request, call_next):
+    """Rechaza cuerpos declarados por encima del máximo antes de leerlos.
+
+    Sin esto, un cliente podía enviar un JSON enorme y el proceso lo cargaba
+    entero en memoria antes de que Pydantic lo validara.
+    """
+    try:
+        declarado = int(request.headers.get("content-length", "0") or 0)
+    except ValueError:
+        declarado = 0
+    if declarado > MAX_CUERPO_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "El cuerpo de la petición es demasiado grande"},
+        )
+    return await call_next(request)
 
 
 # ── Cabeceras de seguridad ──
@@ -85,7 +135,14 @@ async def cabeceras_seguridad(request: Request, call_next):
         "Permissions-Policy", "geolocation=(), microphone=(), camera=(), interest-cohort=()"
     )
     response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
     response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+
+    # Los datos de negocio y los tokens no deben quedar en cachés intermedias.
+    if request.url.path.startswith(PREFIJOS_API):
+        response.headers.setdefault("Cache-Control", "no-store")
+
     if ENABLE_HSTS:
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
@@ -100,6 +157,8 @@ def _origenes_permitidos() -> list[str]:
     return [o for o in origenes if o != "*"]
 
 
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origenes_permitidos(),
@@ -107,6 +166,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+_allowed_hosts = os.getenv("ALLOWED_HOSTS", "").strip()
+if _allowed_hosts:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=[h.strip() for h in _allowed_hosts.split(",") if h.strip()],
+    )
 
 
 # ── Manejadores de error: nunca filtran trazas ni detalles internos ──
@@ -163,7 +229,15 @@ def spa_fallback(full_path: str):
     # `full_path` llega sin la barra inicial, así que hay que reponerla para
     # comparar contra los prefijos de API.
     ruta = "/" + full_path
-    if ruta.startswith(PREFIJOS_API):
+    es_pagina = ruta.rstrip("/") in RUTAS_SPA
+
+    # Solo se rechaza si es API de verdad (prefijo exacto o con subruta) y no
+    # una página de la SPA que casualmente comparte nombre con el prefijo.
+    es_api = any(
+        ruta == prefijo or ruta.startswith(prefijo + "/")
+        for prefijo in PREFIJOS_API
+    )
+    if es_api and not es_pagina:
         return JSONResponse(status_code=404, content={"detail": "Recurso no encontrado"})
 
     candidato = os.path.abspath(os.path.join(DIST, full_path))
